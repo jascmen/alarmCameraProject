@@ -12,7 +12,7 @@ def enviar_sms():
 
     message = client.messages \
         .create(
-        body='cuidado hay un papu rondando tu laptop, revisa tu email para ver la imagen',
+        body='Personas detectadas en la zona, revisa tu email para ver la imagen',
         from_='+14356592185',
         to='+51941768950'
     )

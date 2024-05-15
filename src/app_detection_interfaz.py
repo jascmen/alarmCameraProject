@@ -26,17 +26,18 @@ class App:
         self.image_label.pack(padx=10, pady=10)
 
         # Botón para encender la cámara
-        self.btn_start = tk.Button(window, text="Encender cámara", width=50, command=self.open_camera)
+        self.btn_start = tk.Button(window, text="Encender Sistema", width=50, command=self.open_camera)
         self.btn_start.pack(anchor=tk.CENTER, expand=True)
 
         # Botón para apagar la cámara
-        self.btn_stop = tk.Button(window, text="Apagar cámara", width=50, command=self.close_camera)
+        self.btn_stop = tk.Button(window, text="Apagar Sistema", width=50, command=self.close_camera)
         self.btn_stop.pack(anchor=tk.CENTER, expand=True)
 
         # Mostrar una imagen gris cuando la cámara no está encendida
         self.gray_image = ImageTk.PhotoImage(Image.fromarray(np.zeros((500, 500, 3), dtype=np.uint8)))
         self.image_label.config(image=self.gray_image)
 
+        # Iniciar el bucle principal de la interfaz
         self.window.mainloop()
 
     def open_camera(self):
@@ -46,14 +47,14 @@ class App:
                 messagebox.showerror("Error", "No se pudo abrir la cámara.")
                 return
             self.is_camera_on = True
-            self.btn_start.config(text="Cámara encendida")
+            self.btn_start.config(text="Sistema encendido")
             threading.Thread(target=self.run_object_detection).start()
 
     def close_camera(self):
         if self.is_camera_on:
             self.is_camera_on = False
             self.vid.release()
-            self.btn_start.config(text="Encender cámara")
+            self.btn_start.config(text="Encender Sistema")
             self.image_label.config(image=self.gray_image)
             self.image_label.update()
 

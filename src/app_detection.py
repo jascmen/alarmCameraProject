@@ -20,11 +20,11 @@ class App:
         self.sms_interval = 20  # Intervalo de tiempo mínimo entre mensajes SMS en segundos
 
         # Botón para encender la cámara
-        self.btn_start = tk.Button(window, text="Encender cámara", width=50, command=self.open_camera)
+        self.btn_start = tk.Button(window, text="Encender Sistema", width=50, command=self.open_camera)
         self.btn_start.pack(anchor=tk.CENTER, expand=True)
 
         # Botón para apagar la cámara
-        self.btn_stop = tk.Button(window, text="Apagar cámara", width=50, command=self.close_camera)
+        self.btn_stop = tk.Button(window, text="Apagar Sistema", width=50, command=self.close_camera)
         self.btn_stop.pack(anchor=tk.CENTER, expand=True)
 
         self.window.mainloop()
@@ -36,14 +36,14 @@ class App:
                 messagebox.showerror("Error", "No se pudo abrir la cámara.")
                 return
             self.is_camera_on = True
-            self.btn_start.config(text="Cámara encendida")
+            self.btn_start.config(text="Sistema encendido")
             threading.Thread(target=self.run_object_detection).start()
 
     def close_camera(self):
         if self.is_camera_on:
             self.is_camera_on = False
             self.vid.release()
-            self.btn_start.config(text="Encender cámara")
+            self.btn_start.config(text="Encender Sistema")
 
     def run_object_detection(self):
         while self.is_camera_on:
@@ -51,13 +51,16 @@ class App:
             if not ret:
                 break
 
+            # Realizar la detección de objetos, se configura los parámetros de confianza y las clases a detectar
             results = self.model.predict(frame,stream=True,verbose=False,conf = 0.75,classes=[0])
             annotator = Annotator(frame)
 
             for result in results:
                 boxes = result.boxes
                 for box in boxes:
+                    # Dibujar un rectángulo alrededor de la persona detectada
                     r = box.xyxy[0]
+                    # Obtener la clase del objeto detectado
                     c = box.cls
                     if int(c) == 0:
                         print("¡Persona detectada!")
@@ -81,4 +84,4 @@ class App:
         # Enviar un mensaje SMS
         enviar_sms()
 
-App(tk.Tk(), "Detección de objetos")
+App(tk.Tk(), "Detección")
