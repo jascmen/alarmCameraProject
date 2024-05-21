@@ -97,8 +97,8 @@ class App:
         # Guardar la imagen en un archivo
         cv2.imwrite(filename, image)
         # Enviar la imagen por correo
-        #enviar_correo(filename)
+        enviar_correo(filename)
         # Enviar un mensaje SMS
-        #enviar_sms()
+        enviar_sms()
 
 App(tk.Tk(), "Detección de objetos")

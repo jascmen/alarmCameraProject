@@ -16,3 +16,5 @@ def enviar_sms():
         from_='+14356592185',
         to='+51941768950'
     )
+
+    #print(message.sid)

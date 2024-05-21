@@ -74,7 +74,7 @@ class App:
         self.vid.release()
 
     def save_image_and_send_email(self, image):
-        filename = 'detection_{}.png'.format(int(time.time()))
+        filename = '../images/detection_{}.png'.format(int(time.time()))
         if os.path.exists(filename):
             os.remove(filename)
         # Guardar la imagen en un archivo
