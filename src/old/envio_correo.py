@@ -19,7 +19,7 @@ def enviar_correo(image_path):
     mensaje['To'] = destinatario
     mensaje['Subject'] = asunto
 
-    with open('email.html', 'r') as file:
+    with open('../email.html', 'r') as file:
         html = file.read()
 
     # Adjuntar el mensaje al cuerpo del correo
