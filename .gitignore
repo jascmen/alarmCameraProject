@@ -1,4 +1,3 @@
 .env
-images/*.png
 src/old/
 src/secret.txt
