@@ -1,20 +1,21 @@
 import cv2
 
 class Camera:
-    def __init__(self):
-        self.vid = None
+    def __init__(self, source=0):
+        self.source = source
+        self.cap = None
 
     def open(self):
-        self.vid = cv2.VideoCapture(0)
-        return self.vid.isOpened()
+        self.cap = cv2.VideoCapture(self.source)
+        return self.cap.isOpened()
 
     def get_frame(self):
-        if self.vid:
-            ret, frame = self.vid.read()
-            if ret:
-                return frame
-        return None
+        if self.cap is None or not self.cap.isOpened():
+            return False, None
+        ret, frame = self.cap.read()
+        return ret, frame
 
     def close(self):
-        if self.vid:
-            self.vid.release()
+        if self.cap is not None:
+            self.cap.release()
+            self.cap = None

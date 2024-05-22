@@ -1,0 +1,10 @@
+Pillow
+python-dotenv
+twilio
+ultralytics
+opencv-python
+pyotp
+qrcode
+face_recognition
+numpy
+bcrypt

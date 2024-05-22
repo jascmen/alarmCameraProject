@@ -5,8 +5,14 @@ from tkinter import messagebox, simpledialog, Toplevel
 from camera import Camera
 from detection import ObjectDetection
 from notifications import send_sms, send_email
-from auth import generate_secret, generate_qr_code, verify_code, save_secret, load_secret
+from towfactor import generate_secret, generate_qr_code, verify_code, save_secret, load_secret
 from PIL import Image, ImageTk
+
+import os
+from dotenv import load_dotenv
+import telebot
+
+
 
 class App:
     def __init__(self, window, window_title):
@@ -18,6 +24,8 @@ class App:
         self.last_sms_time = 0
         self.sms_interval = 20  # Intervalo de tiempo mínimo entre mensajes SMS en segundos
         self.secret = load_secret()
+
+
 
         self.main_menu()
 
