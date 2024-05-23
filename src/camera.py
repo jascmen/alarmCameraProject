@@ -1,8 +1,9 @@
 import cv2
 
 class Camera:
-    def __init__(self, source=0):
+    def __init__(self, source=0,zone="None"):
         self.source = source
+        self.zone = zone.upper()
         self.cap = None
 
     def open(self):
@@ -22,3 +23,4 @@ class Camera:
         if self.cap:
             self.cap.release()
             self.cap = None
+

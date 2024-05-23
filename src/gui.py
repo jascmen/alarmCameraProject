@@ -10,6 +10,10 @@ import cv2
 from PIL import Image, ImageTk
 import threading
 import queue
+import pygame
+
+from notifications import send_whatsapp_zone
+
 
 class App:
     def __init__(self, root):
@@ -18,6 +22,7 @@ class App:
         self.main_frame = tk.Frame(root)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         self.cameras = []
+        self.zones = []
         self.camera = Camera(1)  # Inicializa la cámara web por defecto
         self.login_screen()
         self.detector = MobileNetSSD(confidence_threshold=0.9)
@@ -102,6 +107,7 @@ class App:
             self.load_user_interface(user[5], user[1])
         else:
             messagebox.showerror("Error", "Rostro no reconocido")
+            self.login_screen()
 
     def load_user_interface(self, role_id, username):
         self.clear_frame()
@@ -202,17 +208,16 @@ class App:
         tk.Button(self.main_frame, text="Volver", command=self.admin_menu).pack()
 
     def add_camera(self):
-        camera_type = simpledialog.askstring("Tipo de Cámara", "Ingrese 'webcam' para cámara web o 'ip' para cámara IP:")
-        if camera_type == 'webcam':
-            source = 1  # Valor predeterminado para la cámara web
-        elif camera_type == 'ip':
-            source = simpledialog.askstring("URL de Cámara IP", "Ingrese la URL de la cámara IP (e.g., http://192.168.18.4:4747/video):")
-            if not source:
-                messagebox.showerror("Error", "URL de la cámara IP no válida")
-                return
-        else:
-            messagebox.showerror("Error", "Tipo de cámara no válido")
+        source = simpledialog.askstring("URL de Cámara IP", "Ingrese la URL de la cámara IP o el índice de la cámara web (e.g., 0 para la primera cámara web):")
+        if not source:
+            messagebox.showerror("Error", "URL de la cámara IP no válida")
             return
+
+        # Convertir el source a int si es posible
+        try:
+            source = int(source)
+        except ValueError:
+            pass
 
         # Verificar si la cámara ya está en la lista
         for cam in self.cameras:
@@ -220,13 +225,46 @@ class App:
                 messagebox.showinfo("Info", "La cámara ya está en la lista")
                 return
 
-        new_camera = Camera(source)
+        # Preguntar por la zona
+        zone = simpledialog.askstring("Zona de la Cámara", "Ingrese la zona de la cámara (e.g., zona 1):")
+        if not zone:
+            messagebox.showerror("Error", "Zona no válida")
+            return
+
+        # Verificar si la zona ya está en la lista
+        if zone in self.zones:
+            messagebox.showinfo("Info", "La zona ya está en la lista")
+            return
+
+
+
+        new_camera = Camera(source, zone)
         if new_camera.open():
-            new_camera.close()  # Verificar y luego cerrar
-            self.cameras.append(new_camera)
-            messagebox.showinfo("Éxito", "Cámara agregada correctamente")
+            # Mostrar lo que la cámara ve
+            while True:
+                ret, frame = new_camera.cap.read()
+                if not ret:
+                    messagebox.showerror("Error", "No se pudo obtener la señal de la cámara")
+                    new_camera.close()
+                    return
+
+                cv2.imshow('Vista previa: ESC para cancelar, Y para agregar', frame)
+                key = cv2.waitKey(1)
+                if key == ord('y') or key == ord('Y'):
+                    new_camera.close()  # Cerrar la cámara después de verificar
+                    self.cameras.append(new_camera)
+                    self.zones.append(zone)
+                    cv2.destroyAllWindows()
+                    messagebox.showinfo("Éxito", f"Cámara agregada correctamente en {zone}")
+                    break
+                elif key == 27:  # ESC key
+                    new_camera.close()
+                    cv2.destroyAllWindows()
+                    messagebox.showinfo("Cancelado", "Cámara no agregada")
+                    break
         else:
             messagebox.showerror("Error", "No se pudo abrir la cámara")
+
 
     def configure_notifications(self):
         self.clear_frame()
@@ -282,14 +320,19 @@ class App:
             frame = tk.Frame(row_frames[row])
             frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-            label = tk.Label(frame, text=f"Cámara {i+1}")
+            label = tk.Label(frame, text=f"Cámara {i+1}, {camera.zone}")
             label.pack()
 
             canvas = tk.Canvas(frame, width=320, height=240)
             canvas.pack(fill=tk.BOTH, expand=True)
 
             self.update_camera_check(camera, canvas)
+            zonita = camera.zone
+            # Agregar un botón para cada cámara que llama a la función alert_zone
+            tk.Button(frame, text="Alerta Zona", command=lambda: self.alert_zone(zonita)).pack()
 
+
+        tk.Button(self.main_frame, text="Alerta", command=self.sound_alert).pack()
         tk.Button(self.main_frame, text="Volver", command=self.close_cameras).pack()
     def update_camera_check(self, camera, canvas):
         def update():
@@ -347,7 +390,7 @@ class App:
             frame = tk.Frame(row_frames[row])
             frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-            label = tk.Label(frame, text=f"Cámara {i+1}")
+            label = tk.Label(frame, text=f"Cámara {i+1}, Zone {camera.zone}")
             label.pack()
 
             canvas = tk.Canvas(frame, width=320, height=240)
@@ -405,15 +448,25 @@ class App:
             camera.close()
         self.clear_frame()
         self.admin_menu()
-    def close_cameras(self):
-        self.running = False
-        for t in self.threads:
-            t.join()
 
-        for camera in self.cameras:
-            camera.close()
-        self.clear_frame()
-        self.admin_menu()
+
+
+    def sound_alert(self):
+        threading.Thread(target=self.play_sound).start()
+
+    def play_sound(self):
+        pygame.mixer.init()
+        pygame.mixer.music.load("../sounds/alarm.mp3")
+        pygame.mixer.music.play(0)
+
+        pygame.time.wait(3000)
+
+        pygame.mixer.music.stop()
+        pygame.mixer.quit()
+
+    def alert_zone(self, zone):
+        send_whatsapp_zone(zone)
+
 
 def get_all_users():
     return get_users()

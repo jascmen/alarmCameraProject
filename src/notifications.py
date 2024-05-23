@@ -7,6 +7,8 @@ from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 
 
+
+
 def send_sms():
 
     load_dotenv()
@@ -57,3 +59,24 @@ def send_email(filename):
     # Enviar el mensaje
     server.sendmail(remitente, destinatario, mensaje.as_string())
     server.quit()
+
+
+def send_whatsapp_zone(zone):
+
+    load_dotenv()
+
+    account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+    auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+    client = Client(account_sid, auth_token)
+
+    client = Client(account_sid, auth_token)
+
+    message = client.messages.create(
+        from_='whatsapp:+14155238886',
+        body='Alerta en la zona ' + zone + ', avisar al personal de seguridad',
+        to='whatsapp:+51941768950'
+    )
+    #print(message.sid)
+
+
+
