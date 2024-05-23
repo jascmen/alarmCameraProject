@@ -1,3 +1,4 @@
 .env
 src/old/
 src/secret.txt
+src/users.db

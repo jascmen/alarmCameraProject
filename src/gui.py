@@ -2,7 +2,7 @@ import time
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 from auth import register_user, authenticate_user, save_face_data, load_face_data
-from database import init_db, add_role, get_role, get_user, get_users, get_role_user
+from database import init_db, add_role, get_role, get_user, get_users, get_role_user, get_roles
 from camera import Camera
 from face_recognition import encode_face, compare_faces
 from detection import MobileNetSSD
@@ -12,7 +12,7 @@ import threading
 import queue
 import pygame
 
-from notifications import send_whatsapp_zone
+from notifications import send_whatsapp_zone, send_email, send_whatsapp_admin
 
 
 class App:
@@ -28,6 +28,11 @@ class App:
         self.detector = MobileNetSSD(confidence_threshold=0.9)
         self.running = False
         self.threads = []
+        self.last_email_time = 0
+        self.email_interval = 20  # Intervalo de tiempo mínimo entre mensajes
+        self.whatsapp_alert_sent = False
+        self.whatsapp_alert_interval = 20  # Intervalo de tiempo en segundos entre alertas
+        self.last_whatsapp_alert_time = 0
 
     def login_screen(self):
         self.clear_frame()
@@ -115,6 +120,8 @@ class App:
         name = get_user(username)
         if role[1] == 'Admin':
             self.admin_menu()
+        elif role[1] == 'Monitoreo':
+            self.monitor_menu(name)
         else:
             tk.Label(self.main_frame, text=f"Bienvenido, {name[1]}").pack()
 
@@ -126,8 +133,17 @@ class App:
         tk.Button(self.main_frame, text="Configurar Cámaras", command=self.configure_cameras).pack(fill='x')
         tk.Button(self.main_frame, text="Configurar Notificaciones", command=self.configure_notifications).pack(fill='x')
         tk.Button(self.main_frame, text="Visualizar Registros de Actividad", command=self.view_activity_logs).pack(fill='x')
-        tk.Button(self.main_frame, text="Verificar imagen de Cámaras", command=self.show_cameras).pack(fill='x')
-        tk.Button(self.main_frame, text="Encender Sistema de monitoreo", command=self.start_system_alarm).pack(fill='x')
+        tk.Button(self.main_frame, text="Encender Sistema de monitoreo", command=self.show_cameras).pack(fill='x')
+        tk.Button(self.main_frame, text="Encender Sistema de Deteccion", command=self.start_system_alarm).pack(fill='x')
+        tk.Button(self.main_frame, text="Salir", command=self.root.quit).pack(fill='x')
+
+    def monitor_menu(self, name):
+        self.clear_frame()
+        tk.Label(self.main_frame, text=f"Bienvenido, {name[1]}").pack()
+
+        tk.Button(self.main_frame, text="Configurar Cámaras", command=self.configure_cameras).pack(fill='x')
+        tk.Button(self.main_frame, text="Encender Sistema de monitoreo", command=self.show_cameras).pack(fill='x')
+        tk.Button(self.main_frame, text="Encender Sistema de Deteccion", command=self.start_system_alarm).pack(fill='x')
         tk.Button(self.main_frame, text="Salir", command=self.root.quit).pack(fill='x')
 
     def register_user(self):
@@ -150,10 +166,21 @@ class App:
         self.celular_entry = tk.Entry(self.main_frame)
         self.celular_entry.pack()
 
+        #roles de la base de datos
+        roles = get_roles()
+
+        # Extraer los nombres de los roles
+        role_names = [role[1] for role in roles]  # Asume que el nombre del rol es el segundo elemento de cada tupla
+
         tk.Label(self.main_frame, text="Rol").pack()
         self.role_var = tk.StringVar(self.main_frame)
-        self.role_var.set("Standard User")
-        self.role_option = tk.OptionMenu(self.main_frame, self.role_var, "Power User", "Standard User", "Guest")
+
+        # Establecer el valor predeterminado como el primer rol en la lista, si la lista no está vacía
+        if role_names:
+            self.role_var.set(role_names[0])
+
+        # Pasar la lista de nombres de roles al OptionMenu
+        self.role_option = tk.OptionMenu(self.main_frame, self.role_var, *role_names)
         self.role_option.pack()
 
         tk.Button(self.main_frame, text="Capturar Rostro", command=self.capture_face_for_registration).pack()
@@ -327,12 +354,11 @@ class App:
             canvas.pack(fill=tk.BOTH, expand=True)
 
             self.update_camera_check(camera, canvas)
-            zonita = camera.zone
             # Agregar un botón para cada cámara que llama a la función alert_zone
-            tk.Button(frame, text="Alerta Zona", command=lambda: self.alert_zone(zonita)).pack()
+            tk.Button(frame, text="WhatsApp Zona", command=lambda zone=camera.zone: self.alert_zone(zone)).pack()
 
 
-        tk.Button(self.main_frame, text="Alerta", command=self.sound_alert).pack()
+        tk.Button(self.main_frame, text="Sonar Alerta", command=self.sound_alert).pack()
         tk.Button(self.main_frame, text="Volver", command=self.close_cameras).pack()
     def update_camera_check(self, camera, canvas):
         def update():
@@ -412,7 +438,18 @@ class App:
             ret, frame = camera.get_frame()
             if ret and frame is not None:
                 if detect_person:
-                    frame, detections = self.detector.detect(frame)
+                    frame, detections,save_image = self.detector.detect(frame)
+                    if save_image:
+                        current_time = time.time()
+                        if current_time - self.last_email_time > self.email_interval:
+                            # Iniciar un nuevo hilo para guardar la imagen y enviar el correo
+                            #filename = self.detector.save_image(frame)
+                            threading.Thread(target=self.save_image_send_notification, args=(frame,)).start()
+                            self.last_email_time = current_time
+                        if current_time - self.last_whatsapp_alert_time > self.whatsapp_alert_interval:
+                            threading.Thread(target=self.send_whatsapp_alert_detection).start()
+                            self.whatsapp_alert_sent = True
+                            self.last_whatsapp_alert_time = current_time
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 img = Image.fromarray(frame)
                 q.put(img)  # Poner la imagen en la cola
@@ -465,7 +502,26 @@ class App:
         pygame.mixer.quit()
 
     def alert_zone(self, zone):
+        threading.Thread(target=self.send_whatsapp_alert, args=(zone,)).start()
+
+    def send_whatsapp_alert(self, zone):
         send_whatsapp_zone(zone)
+
+    def send_whatsapp_alert_detection(self):
+        send_whatsapp_admin()
+        threading.Thread(target=self.reset_whatsapp_alert).start()
+
+    def reset_whatsapp_alert(self):
+        time.sleep(self.whatsapp_alert_interval)
+        self.whatsapp_alert_sent = False
+
+    def save_image_send_notification(self, image):
+        filename = self.detector.save_image(image)
+        self.send_email_notification(filename)
+
+    def send_email_notification(self, filename):
+        # Implementa el envío de notificaciones por correo electrónico aquí
+        send_email(filename)
 
 
 def get_all_users():
@@ -478,9 +534,8 @@ if __name__ == "__main__":
     init_db()
     if not get_role('Admin'):
         add_role('Admin')
-        add_role('Power User')
-        add_role('Standard User')
-        add_role('Guest')
+        add_role('Monitoreo')
+        add_role('General')
         register_user('admin', 'admin', 'admin@example.com', '941768950', get_role('Admin')[0], None)
 
     root = tk.Tk()

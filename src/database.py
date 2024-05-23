@@ -65,3 +65,11 @@ def get_role_user(role_id):
     conn.close()
     return role
 
+def get_roles():
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute('SELECT * FROM roles')
+    roles = c.fetchall()
+    conn.close()
+    return roles
+

@@ -1,13 +1,16 @@
 import cv2
 import numpy as np
-import os
 import time
+import os
 
 class MobileNetSSD:
-    def __init__(self, confidence_threshold=0.9):
+    def __init__(self, confidence_threshold=0.9,save_interval=20):
         # Cargar el modelo preentrenado MobileNet-SSD
         self.net = cv2.dnn.readNetFromCaffe('deploy.prototxt', 'mobilenet_iter_73000.caffemodel')
         self.confidence_threshold = confidence_threshold
+        self.last_saved_time = 0  # Tiempo de la última imagen guardada
+        self.save_interval = save_interval  # Intervalo de tiempo en segundos entre guardados
+
 
     def detect(self, frame):
         (h, w) = frame.shape[:2]
@@ -16,6 +19,9 @@ class MobileNetSSD:
         detections = self.net.forward()
 
         person_detections = []
+        current_time = time.time()
+        save_image = False
+
         for i in range(detections.shape[2]):
             confidence = detections[0, 0, i, 2]
             if confidence > self.confidence_threshold:
@@ -29,7 +35,7 @@ class MobileNetSSD:
                         continue  # Ignorar detecciones con valores inválidos
 
                     startX, startY = max(0, startX), max(0, startY)
-                    endX, endY = min(w, endX), min(h, endY)
+                    endX, endY = min(w, endX), min(h, endX)
 
                     label = "Persona: {:.2f}%".format(confidence * 100)
                     cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 255, 0), 2)
@@ -37,10 +43,16 @@ class MobileNetSSD:
                     cv2.putText(frame, label, (startX, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                     person_detections.append((box, label))
 
-        return frame, person_detections
+                    # Guardar la imagen si ha pasado el intervalo de tiempo
+
+                    if current_time - self.last_saved_time > self.save_interval:
+                        save_image = True
+                        self.last_saved_time = current_time
+
+        return frame, person_detections,save_image
 
     def save_image(self, image):
-        filename = 'detection_{}.png'.format(int(time.time()))
+        filename = '../images/detection_{}.png'.format(int(time.time()))
         if os.path.exists(filename):
             os.remove(filename)
         cv2.imwrite(filename, image)
