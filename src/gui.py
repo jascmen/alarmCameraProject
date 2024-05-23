@@ -1,12 +1,15 @@
+import time
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 from auth import register_user, authenticate_user, save_face_data, load_face_data
-from database import init_db, add_role, get_role, get_user
+from database import init_db, add_role, get_role, get_user, get_users, get_role_user
 from camera import Camera
 from face_recognition import encode_face, compare_faces
-import sqlite3
+from detection import MobileNetSSD
 import cv2
 from PIL import Image, ImageTk
+import threading
+import queue
 
 class App:
     def __init__(self, root):
@@ -15,8 +18,11 @@ class App:
         self.main_frame = tk.Frame(root)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         self.cameras = []
-        self.camera = Camera(0)  # Inicializa la cámara web por defecto
+        self.camera = Camera(1)  # Inicializa la cámara web por defecto
         self.login_screen()
+        self.detector = MobileNetSSD(confidence_threshold=0.9)
+        self.running = False
+        self.threads = []
 
     def login_screen(self):
         self.clear_frame()
@@ -39,16 +45,41 @@ class App:
         authenticated, user = authenticate_user(username, password)
         if authenticated:
             role_id = user[5]
-            self.load_user_interface(role_id)
+            self.load_user_interface(role_id, username)
         else:
             messagebox.showerror("Error", "Usuario o contraseña incorrectos")
 
     def login_with_face(self):
+        username = self.username_entry.get()
+        if not username:
+            messagebox.showerror("Error", "Por favor, ingrese el nombre de usuario")
+            return
+
+        # Mostrar mensaje de carga
+        loading_label = tk.Label(self.main_frame, text="Preparando captura de rostro...")
+        loading_label.grid(row=2, columnspan=2, pady=10)
+        self.root.update_idletasks()
+
         if not self.camera.open():
+            loading_label.destroy()
             messagebox.showerror("Error", "No se pudo abrir la cámara")
             return
 
-        face_image = self.camera.get_frame()
+        face_image = None
+        cv2.namedWindow("Captura de Rostro, presione ESC para capturar")
+
+        # Eliminar mensaje de carga
+        loading_label.destroy()
+
+        while True:
+            ret, frame = self.camera.get_frame()
+            if ret:
+                cv2.imshow("Captura de Rostro, presione ESC para capturar", frame)
+                if cv2.waitKey(1) & 0xFF == 27:  # Presiona ESC para capturar el rostro
+                    face_image = frame
+                    break
+
+        cv2.destroyAllWindows()
         self.camera.close()
 
         if face_image is None:
@@ -60,31 +91,26 @@ class App:
             messagebox.showerror("Error", "No se detectó ningún rostro")
             return
 
-        users = get_all_users()
-        known_face_encodings = []
-        for user in users:
-            stored_face_data = load_face_data(user[5])
-            stored_face_encoding = encode_face(stored_face_data)
-            if stored_face_encoding is not None:
-                known_face_encodings.append(stored_face_encoding)
+        user = get_user(username)
+        if user is None:
+            messagebox.showerror("Error", "Usuario no encontrado")
+            return
 
-        if compare_faces(known_face_encodings, face_encoding):
-            for user in users:
-                stored_face_data = load_face_data(user[5])
-                stored_face_encoding = encode_face(stored_face_data)
-                if stored_face_encoding is not None and compare_faces([stored_face_encoding], face_encoding):
-                    role_id = user[4]
-                    self.load_user_interface(role_id)
-                    return
-        messagebox.showerror("Error", "Rostro no reconocido")
+        stored_face_data = load_face_data(user[6])
+        stored_face_encoding = encode_face(stored_face_data)
+        if stored_face_encoding is not None and compare_faces(stored_face_encoding, face_encoding):
+            self.load_user_interface(user[5], user[1])
+        else:
+            messagebox.showerror("Error", "Rostro no reconocido")
 
-    def load_user_interface(self, role_id):
+    def load_user_interface(self, role_id, username):
         self.clear_frame()
         role = get_role_by_id(role_id)
+        name = get_user(username)
         if role[1] == 'Admin':
             self.admin_menu()
         else:
-            tk.Label(self.main_frame, text=f"Bienvenido, {role[1]}").pack()
+            tk.Label(self.main_frame, text=f"Bienvenido, {name[1]}").pack()
 
     def admin_menu(self):
         self.clear_frame()
@@ -94,7 +120,8 @@ class App:
         tk.Button(self.main_frame, text="Configurar Cámaras", command=self.configure_cameras).pack(fill='x')
         tk.Button(self.main_frame, text="Configurar Notificaciones", command=self.configure_notifications).pack(fill='x')
         tk.Button(self.main_frame, text="Visualizar Registros de Actividad", command=self.view_activity_logs).pack(fill='x')
-        tk.Button(self.main_frame, text="Mostrar Cámaras", command=self.show_cameras).pack(fill='x')
+        tk.Button(self.main_frame, text="Verificar imagen de Cámaras", command=self.show_cameras).pack(fill='x')
+        tk.Button(self.main_frame, text="Encender Sistema de monitoreo", command=self.start_system_alarm).pack(fill='x')
         tk.Button(self.main_frame, text="Salir", command=self.root.quit).pack(fill='x')
 
     def register_user(self):
@@ -167,7 +194,6 @@ class App:
         else:
             messagebox.showerror("Error", "Rol no válido")
 
-
     def configure_cameras(self):
         self.clear_frame()
         tk.Label(self.main_frame, text="Configurar Cámaras").pack()
@@ -178,7 +204,7 @@ class App:
     def add_camera(self):
         camera_type = simpledialog.askstring("Tipo de Cámara", "Ingrese 'webcam' para cámara web o 'ip' para cámara IP:")
         if camera_type == 'webcam':
-            source = 0  # Valor predeterminado para la cámara web
+            source = 1  # Valor predeterminado para la cámara web
         elif camera_type == 'ip':
             source = simpledialog.askstring("URL de Cámara IP", "Ingrese la URL de la cámara IP (e.g., http://192.168.18.4:4747/video):")
             if not source:
@@ -188,13 +214,19 @@ class App:
             messagebox.showerror("Error", "Tipo de cámara no válido")
             return
 
+        # Verificar si la cámara ya está en la lista
+        for cam in self.cameras:
+            if cam.source == source:
+                messagebox.showinfo("Info", "La cámara ya está en la lista")
+                return
+
         new_camera = Camera(source)
         if new_camera.open():
+            new_camera.close()  # Verificar y luego cerrar
             self.cameras.append(new_camera)
             messagebox.showinfo("Éxito", "Cámara agregada correctamente")
         else:
             messagebox.showerror("Error", "No se pudo abrir la cámara")
-
 
     def configure_notifications(self):
         self.clear_frame()
@@ -211,24 +243,34 @@ class App:
         notification_email = self.notification_email_entry.get()
         # Implementa el guardado de la dirección de correo electrónico para notificaciones aquí
         messagebox.showinfo("Notificaciones", "Funcionalidad en desarrollo")
+
     def view_activity_logs(self):
         # Implementa la visualización de registros de actividad aquí
         messagebox.showinfo("Registros de Actividad", "Funcionalidad en desarrollo")
 
     def show_cameras(self):
         self.clear_frame()
+        self.loading_label = tk.Label(self.main_frame, text="Cargando cámaras...")
+        self.loading_label.pack()
+        self.root.update_idletasks()
+
+        # Abre todas las cámaras
+        for camera in self.cameras:
+            if not camera.open():
+                messagebox.showerror("Error", f"No se pudo abrir la cámara con source {camera.source}")
+                return
+
+        # Eliminar el mensaje de carga y mostrar las cámaras
+        self.loading_label.destroy()
         tk.Label(self.main_frame, text="Visualización de Cámaras").pack()
 
-        # Frame contenedor para las cámaras
         cameras_frame = tk.Frame(self.main_frame)
         cameras_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Determina el número de columnas
-        num_columns = 2  # Puedes ajustar este valor según sea necesario
+        num_columns = 2
         num_cameras = len(self.cameras)
         num_rows = (num_cameras + num_columns - 1) // num_columns
 
-        # Crear una lista de frames para cada fila
         row_frames = [tk.Frame(cameras_frame) for _ in range(num_rows)]
         for rf in row_frames:
             rf.pack(fill=tk.BOTH, expand=True)
@@ -243,56 +285,141 @@ class App:
             label = tk.Label(frame, text=f"Cámara {i+1}")
             label.pack()
 
-            canvas = tk.Canvas(frame, width=320, height=240)  # Tamaño inicial más pequeño
-            canvas.pack(fill=tk.BOTH, expand=True)  # Permitir que el canvas se expanda
+            canvas = tk.Canvas(frame, width=320, height=240)
+            canvas.pack(fill=tk.BOTH, expand=True)
 
-            self.update_camera_view(camera, canvas)
+            self.update_camera_check(camera, canvas)
 
         tk.Button(self.main_frame, text="Volver", command=self.close_cameras).pack()
-
-
-    def update_camera_view(self, camera, canvas):
+    def update_camera_check(self, camera, canvas):
         def update():
-            ret, frame = camera.get_frame()  # Modificado para capturar correctamente ret y frame
+            ret, frame = camera.get_frame()
             if ret and frame is not None:
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 img = Image.fromarray(frame)
 
-                # Redimensionar la imagen para que se ajuste al canvas
+                # Redimensionar la imagen para que se ajuste al canvas solo si cambia el tamaño del canvas
                 canvas_width = canvas.winfo_width()
                 canvas_height = canvas.winfo_height()
-                img = img.resize((canvas_width, canvas_height), Image.Resampling.LANCZOS)
+                if canvas_width != img.width or canvas_height != img.height:
+                    img = img.resize((canvas_width, canvas_height), Image.Resampling.LANCZOS)
 
                 imgtk = ImageTk.PhotoImage(image=img)
                 canvas.create_image(0, 0, anchor=tk.NW, image=imgtk)
                 canvas.imgtk = imgtk
 
-            canvas.after(10, update)
+            canvas.after(30, update)  # Actualizar cada 30 ms en lugar de 10 ms
 
         update()
+    def start_system_alarm(self):
+        self.clear_frame()
+        self.loading_label = tk.Label(self.main_frame, text="Cargando cámaras...")
+        self.loading_label.pack()
+        self.root.update_idletasks()
+
+        # Abre todas las cámaras
+        for camera in self.cameras:
+            if not camera.open():
+                messagebox.showerror("Error", f"No se pudo abrir la cámara con source {camera.source}")
+                return
+
+        # Eliminar el mensaje de carga y mostrar las cámaras
+        self.loading_label.destroy()
+        tk.Label(self.main_frame, text="Sistema de Alarma - Detección de Personas").pack()
+
+        cameras_frame = tk.Frame(self.main_frame)
+        cameras_frame.pack(fill=tk.BOTH, expand=True)
+
+        num_columns = 2
+        num_cameras = len(self.cameras)
+        num_rows = (num_cameras + num_columns - 1) // num_columns
+
+        row_frames = [tk.Frame(cameras_frame) for _ in range(num_rows)]
+        for rf in row_frames:
+            rf.pack(fill=tk.BOTH, expand=True)
+
+        self.running = True
+
+        for i, camera in enumerate(self.cameras):
+            row = i // num_columns
+            col = i % num_columns
+
+            frame = tk.Frame(row_frames[row])
+            frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+            label = tk.Label(frame, text=f"Cámara {i+1}")
+            label.pack()
+
+            canvas = tk.Canvas(frame, width=320, height=240)
+            canvas.pack(fill=tk.BOTH, expand=True)
+
+            # Crear una cola para cada cámara
+            q = queue.Queue()
+            t = threading.Thread(target=self.update_camera_view, args=(camera, q, True))
+            t.start()
+            self.threads.append(t)
+
+            # Actualizar la vista de la cámara en el hilo principal de Tkinter
+            self.root.after(100, self.update_canvas, canvas, q)
+
+        tk.Button(self.main_frame, text="Volver", command=self.close_cameras).pack()
+
+    def update_camera_view(self, camera, q, detect_person=False):
+        while self.running:
+            ret, frame = camera.get_frame()
+            if ret and frame is not None:
+                if detect_person:
+                    frame, detections = self.detector.detect(frame)
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(frame)
+                q.put(img)  # Poner la imagen en la cola
+                time.sleep(0.1)  # Esperar 100 ms
+
+    def update_canvas(self, canvas, q):
+        if not canvas.winfo_exists():  # Verificar si el canvas todavía existe
+            return
+
+        try:
+            img = q.get_nowait()  # Obtener la imagen de la cola
+        except queue.Empty:
+            pass  # No hacer nada si la cola está vacía
+        else:
+            canvas_width = canvas.winfo_width()
+            canvas_height = canvas.winfo_height()
+            if canvas_width != img.width or canvas_height != img.height:
+                img = img.resize((canvas_width, canvas_height), Image.Resampling.LANCZOS)
+
+            imgtk = ImageTk.PhotoImage(image=img)
+            canvas.create_image(0, 0, anchor=tk.NW, image=imgtk)
+            canvas.imgtk = imgtk
+
+        if self.running:
+            self.root.after(100, self.update_canvas, canvas, q)  # Actualizar cada 100 ms
 
     def close_cameras(self):
-        self.admin_menu()
+        self.running = False
+        for t in self.threads:
+            t.join()
+
         for camera in self.cameras:
             camera.close()
+        self.clear_frame()
+        self.admin_menu()
+    def close_cameras(self):
+        self.running = False
+        for t in self.threads:
+            t.join()
 
-
+        for camera in self.cameras:
+            camera.close()
+        self.clear_frame()
+        self.admin_menu()
 
 def get_all_users():
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute('SELECT * FROM users')
-    users = c.fetchall()
-    conn.close()
-    return users
+    return get_users()
 
 def get_role_by_id(role_id):
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute('SELECT * FROM roles WHERE id = ?', (role_id,))
-    role = c.fetchone()
-    conn.close()
-    return role
+    return get_role_user(role_id)
 
 if __name__ == "__main__":
     init_db()

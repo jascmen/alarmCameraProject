@@ -48,3 +48,20 @@ def get_role(role_name):
     role = c.fetchone()
     conn.close()
     return role
+
+def get_users():
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute('SELECT * FROM users')
+    users = c.fetchall()
+    conn.close()
+    return users
+
+def get_role_user(role_id):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute('SELECT * FROM roles WHERE id = ?', (role_id,))
+    role = c.fetchone()
+    conn.close()
+    return role
+

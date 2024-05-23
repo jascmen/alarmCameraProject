@@ -1,10 +1,12 @@
 Pillow
 python-dotenv
 twilio
-ultralytics
+#ultralytics
 opencv-python
 pyotp
 qrcode
 face_recognition
 numpy
 bcrypt
+opencv-contrib-python
+psutil
