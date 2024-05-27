@@ -17,6 +17,7 @@ import queue
 import pygame
 
 from notifications import send_whatsapp_zone, send_email, send_whatsapp_admin
+from towfactor import generate_secret, save_secret, generate_qr_code, verify_code, load_secret
 
 
 class App:
@@ -40,6 +41,7 @@ class App:
         self.whatsapp_alert_sent = False
         self.whatsapp_alert_interval = 20
         self.last_whatsapp_alert_time = 0
+        self.secret = load_secret()
 
 
 
@@ -103,10 +105,10 @@ class App:
         else:
             messagebox.showerror("Error", "Usuario o contraseña incorrectos")
 
-    def login_with_face(self,role_id,username):
-        self.clear_frame()
-        role = get_role_user(role_id)
+    def login_with_face(self):
         username = self.username_entry.get()
+        self.clear_frame()
+        role = get_role_user(username)
         if not username:
             messagebox.showerror("Error", "Por favor, ingrese el nombre de usuario")
             return
@@ -153,7 +155,7 @@ class App:
         stored_face_data = load_face_data(user[6])
         stored_face_encoding = encode_face(stored_face_data)
         if stored_face_encoding is not None and compare_faces(stored_face_encoding, face_encoding):
-            self.load_user_interface(user[5], user[1])
+            self.load_user_interface(user[1], user[5])
         else:
             messagebox.showerror("Error", "Rostro no reconocido")
             self.login_screen()
@@ -200,10 +202,12 @@ class App:
 
         ctk.CTkButton(menu_frame, text="Registrar Usuario", image=user_icon, command=self.register_user,
                       **button_config).pack(pady=10, padx=10)
+        #boton para vincular autenticador de google
+        ctk.CTkButton(menu_frame, text="Vincular Autenticador de Google", image=user_icon, command=self.link_autenticator,**button_config).pack(pady=10, padx=10)
         ctk.CTkButton(menu_frame, text="Configurar Cámaras", image=camera_icon, command=self.configure_cameras,
                       **button_config).pack(pady=10, padx=10)
-        ctk.CTkButton(menu_frame, text="Configurar Notificaciones", image=notification_icon,
-                      command=self.configure_notifications, **button_config).pack(pady=10, padx=10)
+        # ctk.CTkButton(menu_frame, text="Configurar Notificaciones", image=notification_icon,
+        #               command=self.configure_notifications, **button_config).pack(pady=10, padx=10)
         ctk.CTkButton(menu_frame, text="Visualizar Registros de Actividad", image=logs_icon,
                       command=self.view_activity_logs, **button_config).pack(pady=10, padx=10)
         ctk.CTkButton(menu_frame, text="Encender Sistema de Monitoreo", image=monitor_icon, command=self.show_cameras,
@@ -225,7 +229,7 @@ class App:
 
         ctk.CTkButton(self.main_frame, text="Configurar Cámaras", command=self.configure_cameras).pack(fill='x')
         ctk.CTkButton(self.main_frame, text="Encender Sistema de monitoreo", command=self.show_cameras).pack(fill='x')
-        ctk.CTkButton(self.main_frame, text="Encender Sistema de Deteccion", command=self.start_system_alarm).pack(fill='x')
+        #ctk.CTkButton(self.main_frame, text="Encender Sistema de Deteccion", command=self.start_system_alarm).pack(fill='x')
         ctk.CTkButton(self.main_frame, text="Salir", command=self.root.quit).pack(fill='x')
 
     def register_user(self):
@@ -342,6 +346,7 @@ class App:
         if role:
             register_user(username, password, email, celular, role[0], face_data)
             messagebox.showinfo("Éxito", "Usuario registrado con éxito")
+            threading.Thread(target=self.send_email_user, args=(email,)).start()
             self.admin_menu()
         else:
             messagebox.showerror("Error", "Rol no válido")
@@ -424,40 +429,40 @@ class App:
         else:
             messagebox.showerror("Error", "No se pudo abrir la cámara")
 
-    def configure_notifications(self, button_config=None):
-        self.clear_frame()
-        ctk.CTkLabel(self.main_frame, text="Configurar Notificaciones", font=("Cascadia Code Pl", 25, "bold"),
-                     text_color="#ffffff").pack(pady=20)
-
-        notification_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
-        notification_frame.pack(padx=20, pady=20, fill='both', expand=True)
-
-        input_config = {
-            "width": 300,
-            "height": 40,
-            "corner_radius": 10,
-            "font": ("Cascadia Code Pl", 15)
-        }
-
-        ctk.CTkLabel(notification_frame, text="Email de Notificación").pack(pady=10)
-        self.notification_email_entry = ctk.CTkEntry(notification_frame, **input_config)
-        self.notification_email_entry.pack(pady=10)
-
-        if button_config is None:
-            button_config = {
-                "width": 300,
-                "height": 50,
-                "corner_radius": 10,
-                "font": ("Cascadia Code Pl", 15),
-                "hover_color": "#ff6600"
-            }
-
-        ctk.CTkButton(notification_frame, text="Guardar", command=self.save_notifications, **button_config).pack(
-            pady=10)
-        ctk.CTkButton(notification_frame, text="Volver", command=self.load_interface_by_role, **button_config).pack(pady=10)
-
-        notification_frame.grid_columnconfigure(0, weight=1)
-        notification_frame.grid_columnconfigure(1, weight=1)
+    # def configure_notifications(self, button_config=None):
+    #     self.clear_frame()
+    #     ctk.CTkLabel(self.main_frame, text="Configurar Notificaciones", font=("Cascadia Code Pl", 25, "bold"),
+    #                  text_color="#ffffff").pack(pady=20)
+    #
+    #     notification_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
+    #     notification_frame.pack(padx=20, pady=20, fill='both', expand=True)
+    #
+    #     input_config = {
+    #         "width": 300,
+    #         "height": 40,
+    #         "corner_radius": 10,
+    #         "font": ("Cascadia Code Pl", 15)
+    #     }
+    #
+    #     ctk.CTkLabel(notification_frame, text="Email de Notificación").pack(pady=10)
+    #     self.notification_email_entry = ctk.CTkEntry(notification_frame, **input_config)
+    #     self.notification_email_entry.pack(pady=10)
+    #
+    #     if button_config is None:
+    #         button_config = {
+    #             "width": 300,
+    #             "height": 50,
+    #             "corner_radius": 10,
+    #             "font": ("Cascadia Code Pl", 15),
+    #             "hover_color": "#ff6600"
+    #         }
+    #
+    #     ctk.CTkButton(notification_frame, text="Guardar", command=self.save_notifications, **button_config).pack(
+    #         pady=10)
+    #     ctk.CTkButton(notification_frame, text="Volver", command=self.load_interface_by_role, **button_config).pack(pady=10)
+    #
+    #     notification_frame.grid_columnconfigure(0, weight=1)
+    #     notification_frame.grid_columnconfigure(1, weight=1)
 
     def save_notifications(self):
         notification_email = self.notification_email_entry.get()
@@ -532,6 +537,9 @@ class App:
         update()
 
     def start_system_alarm(self):
+        if not self.secret:
+            messagebox.showerror("Error", "Debe vincular el autenticador antes de usar el sistema de alarma.")
+            return
         self.clear_frame()
         self.loading_label = ctk.CTkLabel(self.main_frame, text="Cargando cámaras...", font=("Cascadia Code Pl", 15))
         self.loading_label.pack()
@@ -579,7 +587,7 @@ class App:
 
             self.root.after(100, self.update_canvas, canvas, q)
 
-        ctk.CTkButton(self.main_frame, text="Volver", command=self.close_cameras).pack()
+        ctk.CTkButton(self.main_frame, text="Volver", command=self.authenticate_and_close).pack()
 
     def update_camera_view(self, camera, q, detect_person=False):
         while self.running:
@@ -663,6 +671,34 @@ class App:
     def reset_whatsapp_alert(self):
         time.sleep(self.whatsapp_alert_interval)
         self.whatsapp_alert_sent = False
+
+    def send_email_user(self,correo):
+        send_email(correo)
+
+    def authenticate_and_close(self):
+        code = simpledialog.askstring("Autenticación", "Ingrese el código del autenticador:")
+        if code and verify_code(self.secret, code):
+            self.close_cameras()
+        else:
+            messagebox.showerror("Error", "Código incorrecto. No se puede apagar el sistema.")
+    def link_autenticator(self):
+        self.secret = generate_secret()
+        save_secret(self.secret)
+        generate_qr_code(self.secret, "AdminAccount")
+        self.show_qr_code()
+
+    def show_qr_code(self):
+        self.clear_frame()
+        ctk.CTkLabel(self.main_frame, text="Escanea el código QR para vincular tu autenticador de Google",
+                     font=("Cascadia Code Pl", 20, "bold")).pack()
+
+        qr_code = ctk.CTkImage(Image.open("qrcode.png"), size=(200, 200))
+        ctk.CTkLabel(self.main_frame, image=qr_code).pack()
+
+        ctk.CTkButton(self.main_frame, text="Volver", command=self.load_interface_by_role).pack()
+
+
+
 
     # def save_image(self, image):
     #     local_path = self.detector.save_image(image)

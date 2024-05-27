@@ -23,13 +23,13 @@ def send_sms():
         to='+51941768950'
     )
 
-def send_email(url):
+def send_email(correo):
     # Cargar variables de entorno desde el archivo .env
     load_dotenv()
 
     remitente = os.getenv("USER")
-    destinatario = "teamga94@gmail.com"
-    asunto = 'Alerta de persona detectada'
+    destinatario = correo
+    asunto = 'Correo Registrado Verificacion'
 
     # Cuerpo del mensaje
     mensaje = MIMEMultipart()
@@ -40,10 +40,7 @@ def send_email(url):
     with open('templates/email.html', 'r') as file:
         html = file.read()
 
-    # Reemplazar "url" en la plantilla HTML con la URL real
-    html = html.replace("url", url)
-
-    # Adjuntar el mensaje al cuerpo del correo
+    # Adjuntar el contenido HTML al mensaje
     mensaje.attach(MIMEText(html, 'html'))
 
     # Crear la conexión con el servidor

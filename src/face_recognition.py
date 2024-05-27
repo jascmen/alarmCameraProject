@@ -15,4 +15,4 @@ def compare_faces(known_face_encoding, face_encoding_to_check):
     recognizer = cv2.face.LBPHFaceRecognizer_create()
     recognizer.train([known_face_encoding], np.array([0]))
     label, confidence = recognizer.predict(face_encoding_to_check)
-    return confidence < 50  # Ajusta el umbral de confianza según tus necesidadesn tus necesidades
+    return confidence < 50
