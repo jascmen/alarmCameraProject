@@ -1,6 +1,10 @@
+import os
 import time
 import customtkinter as ctk
 from tkinter import messagebox, simpledialog
+
+from dotenv import load_dotenv
+
 from auth import register_user, authenticate_user, save_face_data, load_face_data
 from database import init_db, add_role, get_role, get_user, get_users, get_role_user, get_roles
 from camera import Camera
@@ -13,7 +17,6 @@ import queue
 import pygame
 
 from notifications import send_whatsapp_zone, send_email, send_whatsapp_admin
-from uploads import authenticate_google_drive, upload_to_drive
 
 
 class App:
@@ -32,13 +35,16 @@ class App:
         self.detector = MobileNetSSD(confidence_threshold=0.9)
         self.running = False
         self.threads = []
-        self.last_save_image_time = 0
-        self.save_image_interval = 5
+        # self.last_save_image_time = 0
+        # self.save_image_interval = 5
         self.whatsapp_alert_sent = False
         self.whatsapp_alert_interval = 20
         self.last_whatsapp_alert_time = 0
-        self.service = authenticate_google_drive()
-        self.folder_id = '1V6HcD-8m0xQQ4H205AO4j0tiUu3FOEHB'
+
+
+
+
+
 
     def login_screen(self):
         self.clear_frame()
@@ -583,9 +589,6 @@ class App:
                     frame, detections,save_image = self.detector.detect(frame)
                     if save_image:
                         current_time = time.time()
-                        if current_time - self.last_save_image_time > self.save_image_interval:
-                            threading.Thread(target=self.save_image, args=(frame,)).start()
-                            #self.last_email_time = current_time
                         if current_time - self.last_whatsapp_alert_time > self.whatsapp_alert_interval:
                             threading.Thread(target=self.send_whatsapp_alert_detection).start()
                             self.whatsapp_alert_sent = True
@@ -661,16 +664,16 @@ class App:
         time.sleep(self.whatsapp_alert_interval)
         self.whatsapp_alert_sent = False
 
-    def save_image(self, image):
-        local_path = self.detector.save_image(image)
-
-        # Sube el archivo a Google Drive en un hilo separado
-        thread = threading.Thread(target=upload_to_drive, args=(self.service, local_path, self.folder_id))
-        thread.start()
-
-        folder_url = f"https://drive.google.com/drive/folders/{self.folder_id}"
-        #print(f'File uploaded. Folder URL: {folder_url}')
-        send_email(folder_url)
+    # def save_image(self, image):
+    #     local_path = self.detector.save_image(image)
+    #
+    #     # Sube el archivo a Google Drive en un hilo separado
+    #     thread = threading.Thread(target=upload_to_drive, args=(self.service, local_path, self.folder_id))
+    #     thread.start()
+    #
+    #     folder_url = f"https://drive.google.com/drive/folders/{self.folder_id}"
+    #     #print(f'File uploaded. Folder URL: {folder_url}')
+    #     send_email(folder_url)
 
 
 

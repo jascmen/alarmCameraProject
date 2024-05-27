@@ -77,16 +77,15 @@ def send_whatsapp_zone(zone):
 def send_whatsapp_admin():
 
     load_dotenv()
+    link_drive = os.getenv("LINK_DRIVE")
 
     account_sid = os.getenv('TWILIO_ACCOUNT_SID')
     auth_token = os.getenv('TWILIO_AUTH_TOKEN')
     client = Client(account_sid, auth_token)
 
-    client = Client(account_sid, auth_token)
-
     message = client.messages.create(
         from_='whatsapp:+14155238886',
-        body='Persona detectada en el loca, revise su correo para observar las imagenes. De ser necesario avise a las autoridades',
+        body='Persona detectada en el loca, revise el enlace para ver los archivos:'+link_drive +' \nDe ser necesario avise a las autoridades.',
         to='whatsapp:+51941768950'
     )
     #print(message.sid)

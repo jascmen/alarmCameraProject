@@ -4,3 +4,4 @@ src/secret.txt
 src/users.db
 src/credentials.json
 src/token.pickle
+images/*.png

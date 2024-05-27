@@ -1,18 +1,29 @@
+import threading
+
 import cv2
 import numpy as np
 import time
 import os
 
+from dotenv import load_dotenv
 from googleapiclient.http import MediaFileUpload
+
+from uploads import authenticate_google_drive,upload_to_drive
+from datetime import datetime
 
 
 class MobileNetSSD:
-    def __init__(self, confidence_threshold=0.9,save_interval=10):
+    def __init__(self, confidence_threshold=0.9,save_interval=15):
         # Cargar el modelo preentrenado MobileNet-SSD
         self.net = cv2.dnn.readNetFromCaffe('deploy.prototxt', 'mobilenet_iter_73000.caffemodel')
         self.confidence_threshold = confidence_threshold
         self.last_saved_time = 0  # Tiempo de la última imagen guardada
         self.save_interval = save_interval  # Intervalo de tiempo en segundos entre guardados
+        self.service = authenticate_google_drive()
+        load_dotenv()
+
+
+        self.folder_id = os.getenv('FOLDER_ID')
 
 
     def detect(self, frame):
@@ -51,6 +62,7 @@ class MobileNetSSD:
                     if current_time - self.last_saved_time > self.save_interval:
                         save_image = True
                         self.last_saved_time = current_time
+                        self.save_image(frame)
 
         return frame, person_detections,save_image
 
@@ -69,8 +81,15 @@ class MobileNetSSD:
     #     cv2.imwrite(local_path, cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR))
     #     return local_path
     def save_image(self, image):
-        # Crear el nombre de archivo único
-        filename = f'detection_{int(time.time())}.png'
+        # Obtener la fecha y hora actual
+        now = datetime.now()
+
+        # Formatear la fecha y hora en el formato deseado
+        formatted_date = now.strftime('%Y-%m-%d-%H-%M-%S-%f')
+
+        # Usar la fecha y hora formateada en el nombre del archivo
+        filename = f'detection_{formatted_date}.png'
+        #filename = f'detection_{int(time.time())}.png'
         local_path = f'../images/{filename}'
 
         # Asegurarse de que el directorio existe
@@ -83,5 +102,6 @@ class MobileNetSSD:
         cv2.imwrite(local_path, image_bgr)
 
         #print(f'Imagen guardada en: {local_path}')
-        return local_path
+        threading.Thread(target=upload_to_drive, args=(self.service, local_path, self.folder_id)).start()
+
 

@@ -42,9 +42,12 @@ def authenticate_google_drive():
 def upload_to_drive(service, filename, folder_id):
     file_metadata = {'name': os.path.basename(filename), 'parents': [folder_id]}
     media = MediaFileUpload(filename, mimetype='image/png')
-    file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-    return f"https://drive.google.com/file/d/{file['id']}/view"
-
+    service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+    #file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+    #print(f"File uploaded. File URL: https://drive.google.com/file/d/{file['id']}/view")
+    #folder_url = f"https://drive.google.com/drive/folders/{folder_id}"
+    #print(f"Folder URL: {folder_url}")
+    #return folder_url
 
 # Ejecutar la función para probar la autenticación
-authenticate_google_drive()
+#authenticate_google_drive()
