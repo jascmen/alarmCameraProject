@@ -1,7 +1,7 @@
 import cv2
 
 def test_camera():
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(2)
     if not cap.isOpened():
         print("No se pudo abrir la cámara")
         return

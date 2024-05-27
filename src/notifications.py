@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.image import MIMEImage
 
 
 
@@ -24,12 +23,12 @@ def send_sms():
         to='+51941768950'
     )
 
-def send_email(filename):
-    #cargar variables de entorno desde el archivo .env
+def send_email(url):
+    # Cargar variables de entorno desde el archivo .env
     load_dotenv()
 
     remitente = os.getenv("USER")
-    destinatario = "jascmen@gmail.com"
+    destinatario = "teamga94@gmail.com"
     asunto = 'Alerta de persona detectada'
 
     # Cuerpo del mensaje
@@ -41,18 +40,15 @@ def send_email(filename):
     with open('templates/email.html', 'r') as file:
         html = file.read()
 
+    # Reemplazar "url" en la plantilla HTML con la URL real
+    html = html.replace("url", url)
+
     # Adjuntar el mensaje al cuerpo del correo
     mensaje.attach(MIMEText(html, 'html'))
 
-    # Adjuntar la imagen al correo
-    with open(filename, 'rb') as file:
-        img = MIMEImage(file.read())
-    img.add_header('Content-Disposition', 'attachment', filename=os.path.basename(filename))
-    mensaje.attach(img)
-
     # Crear la conexión con el servidor
     server = smtplib.SMTP('smtp.gmail.com', 587)
-    #conexion segura
+    # Conexion segura
     server.starttls()
     server.login(remitente, os.getenv("PASS"))
 

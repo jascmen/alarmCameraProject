@@ -3,8 +3,11 @@ import numpy as np
 import time
 import os
 
+from googleapiclient.http import MediaFileUpload
+
+
 class MobileNetSSD:
-    def __init__(self, confidence_threshold=0.9,save_interval=20):
+    def __init__(self, confidence_threshold=0.9,save_interval=10):
         # Cargar el modelo preentrenado MobileNet-SSD
         self.net = cv2.dnn.readNetFromCaffe('deploy.prototxt', 'mobilenet_iter_73000.caffemodel')
         self.confidence_threshold = confidence_threshold
@@ -51,9 +54,34 @@ class MobileNetSSD:
 
         return frame, person_detections,save_image
 
+    # def save_image(self, image):
+    #     filename = '../images/detection_{}.png'.format(int(time.time()))
+    #     if os.path.exists(filename):
+    #         os.remove(filename)
+    #     cv2.imwrite(filename, image)
+    #     return filename
+
+    # def save_image(self, image):
+    #     filename = f'detection_{int(time.time())}.png'
+    #     local_path = f'../images/{filename}'
+    #     if os.path.exists(local_path):
+    #         os.remove(local_path)
+    #     cv2.imwrite(local_path, cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR))
+    #     return local_path
     def save_image(self, image):
-        filename = '../images/detection_{}.png'.format(int(time.time()))
-        if os.path.exists(filename):
-            os.remove(filename)
-        cv2.imwrite(filename, image)
-        return filename
+        # Crear el nombre de archivo único
+        filename = f'detection_{int(time.time())}.png'
+        local_path = f'../images/{filename}'
+
+        # Asegurarse de que el directorio existe
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+        # Convertir la imagen de PIL a OpenCV formato (RGB a BGR)
+        image_bgr = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+
+        # Guardar la imagen
+        cv2.imwrite(local_path, image_bgr)
+
+        #print(f'Imagen guardada en: {local_path}')
+        return local_path
+

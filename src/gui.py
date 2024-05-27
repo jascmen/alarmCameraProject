@@ -1,5 +1,5 @@
 import time
-import tkinter as tk
+import customtkinter as ctk
 from tkinter import messagebox, simpledialog
 from auth import register_user, authenticate_user, save_face_data, load_face_data
 from database import init_db, add_role, get_role, get_user, get_users, get_role_user, get_roles
@@ -13,37 +13,74 @@ import queue
 import pygame
 
 from notifications import send_whatsapp_zone, send_email, send_whatsapp_admin
+from uploads import authenticate_google_drive, upload_to_drive
 
 
 class App:
     def __init__(self, root):
+        self.current_role = None
+        self.password_entry = None
+        self.username_entry = None
         self.root = root
         self.root.title("Sistema de Alarma con Webcam")
-        self.main_frame = tk.Frame(root)
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        self.main_frame = ctk.CTkFrame(root)
+        self.main_frame.pack(fill=ctk.BOTH, expand=True)
         self.cameras = []
         self.zones = []
-        self.camera = Camera(1)  # Inicializa la cámara web por defecto
+        self.camera = Camera(1)
         self.login_screen()
         self.detector = MobileNetSSD(confidence_threshold=0.9)
         self.running = False
         self.threads = []
-        self.last_email_time = 0
-        self.email_interval = 20  # Intervalo de tiempo mínimo entre mensajes
+        self.last_save_image_time = 0
+        self.save_image_interval = 5
         self.whatsapp_alert_sent = False
-        self.whatsapp_alert_interval = 20  # Intervalo de tiempo en segundos entre alertas
+        self.whatsapp_alert_interval = 20
         self.last_whatsapp_alert_time = 0
+        self.service = authenticate_google_drive()
+        self.folder_id = '1V6HcD-8m0xQQ4H205AO4j0tiUu3FOEHB'
 
     def login_screen(self):
         self.clear_frame()
-        tk.Label(self.main_frame, text="Usuario").grid(row=0, column=0)
-        tk.Label(self.main_frame, text="Contraseña").grid(row=1, column=0)
-        self.username_entry = tk.Entry(self.main_frame)
-        self.password_entry = tk.Entry(self.main_frame, show="*")
-        self.username_entry.grid(row=0, column=1)
-        self.password_entry.grid(row=1, column=1)
-        tk.Button(self.main_frame, text="Login", command=self.login).grid(row=2, column=0, columnspan=2)
-        tk.Button(self.main_frame, text="Login con Rostro", command=self.login_with_face).grid(row=3, column=0, columnspan=2)
+
+        logo_frame = ctk.CTkFrame(self.main_frame)
+        logo_frame.grid(row=0, column=0, rowspan=5, padx=20, pady=20, sticky="ns")
+        system_name_label = ctk.CTkLabel(logo_frame, text="ALERTSHIELD", font=("Cascadia Code Pl", 25, "bold"), text_color="red")
+        system_name_label.pack(pady=(0, 10))
+        logo_image = ctk.CTkImage(Image.open("img_sistema/LOGO ALERTSHIELD.jpg"), size=(200, 200))
+        logo_label = ctk.CTkLabel(logo_frame, image=logo_image, text="")
+        logo_label.pack(pady=10)
+
+        ctk.CTkLabel(self.main_frame, text="Inicio de Sesión", font=("Cascadia Code Pl", 20)).grid(row=0, column=1, columnspan=2,
+                                                                                                   pady=20)
+
+        user_icon = ctk.CTkImage(Image.open("img_sistema/user-logo.png"), size=(20, 20))
+        ctk.CTkLabel(self.main_frame, text="  Usuario", font=("Cascadia Code Pl", 15), image=user_icon, compound="left", anchor='w').grid(row=1,
+                                                                                                                                          column=1,
+                                                                                                                                          sticky="ew",
+                                                                                                                                          padx=10,
+                                                                                                                                          pady=(10, 5))
+        self.username_entry = ctk.CTkEntry(self.main_frame)
+        self.username_entry.grid(row=1, column=2, sticky="ew", padx=10, pady=(10, 5))
+
+        pass_icon = ctk.CTkImage(Image.open("img_sistema/password-logo.png"), size=(20, 20))
+        ctk.CTkLabel(self.main_frame, text="  Contraseña", font=("Cascadia Code Pl", 15), image=pass_icon, compound="left", anchor='w').grid(row=2,
+                                                                                                                                             column=1,
+                                                                                                                                             sticky="ew",
+                                                                                                                                             padx=10,
+                                                                                                                                             pady=(
+                                                                                                                                                 5, 10))
+        self.password_entry = ctk.CTkEntry(self.main_frame, show="*")
+        self.password_entry.grid(row=2, column=2, sticky="ew", padx=10, pady=(5, 10))
+
+        ctk.CTkButton(self.main_frame, text="Login", font=("Cascadia Code Pl", 13), command=self.login).grid(row=3, column=1, columnspan=2, pady=10)
+
+        ctk.CTkButton(self.main_frame, text="Login con Rostro", font=("Cascadia Code Pl", 13), command=self.login_with_face).grid(row=4, column=1,
+                                                                                                                                  columnspan=2,
+                                                                                                                                  pady=10)
+
+        self.main_frame.grid_columnconfigure(1, weight=1)
+        self.main_frame.grid_columnconfigure(2, weight=1)
 
     def clear_frame(self):
         for widget in self.main_frame.winfo_children():
@@ -55,18 +92,20 @@ class App:
         authenticated, user = authenticate_user(username, password)
         if authenticated:
             role_id = user[5]
-            self.load_user_interface(role_id, username)
+            self.load_user_interface(username, role_id)
+
         else:
             messagebox.showerror("Error", "Usuario o contraseña incorrectos")
 
-    def login_with_face(self):
+    def login_with_face(self,role_id,username):
+        self.clear_frame()
+        role = get_role_user(role_id)
         username = self.username_entry.get()
         if not username:
             messagebox.showerror("Error", "Por favor, ingrese el nombre de usuario")
             return
 
-        # Mostrar mensaje de carga
-        loading_label = tk.Label(self.main_frame, text="Preparando captura de rostro...")
+        loading_label = ctk.CTkLabel(self.main_frame, text="Preparando captura de rostro...")
         loading_label.grid(row=2, columnspan=2, pady=10)
         self.root.update_idletasks()
 
@@ -78,7 +117,6 @@ class App:
         face_image = None
         cv2.namedWindow("Captura de Rostro, presione ESC para capturar")
 
-        # Eliminar mensaje de carga
         loading_label.destroy()
 
         while True:
@@ -114,78 +152,153 @@ class App:
             messagebox.showerror("Error", "Rostro no reconocido")
             self.login_screen()
 
-    def load_user_interface(self, role_id, username):
+    def load_user_interface(self,username, role_id):
         self.clear_frame()
-        role = get_role_by_id(role_id)
+        role = get_role_user(role_id)
         name = get_user(username)
-        if role[1] == 'Admin':
+        self.current_role = role[0]
+        if role[0] == 1:
             self.admin_menu()
-        elif role[1] == 'Monitoreo':
-            self.monitor_menu(name)
+        elif role[0] == 2:
+            self.monitor_menu()
         else:
-            tk.Label(self.main_frame, text=f"Bienvenido, {name[1]}").pack()
+            ctk.CTkLabel(self.main_frame, text=f"Bienvenido, {name[1]}").pack()
 
     def admin_menu(self):
         self.clear_frame()
-        tk.Label(self.main_frame, text="Menú de Administrador").pack()
 
-        tk.Button(self.main_frame, text="Registrar Usuario", command=self.register_user).pack(fill='x')
-        tk.Button(self.main_frame, text="Configurar Cámaras", command=self.configure_cameras).pack(fill='x')
-        tk.Button(self.main_frame, text="Configurar Notificaciones", command=self.configure_notifications).pack(fill='x')
-        tk.Button(self.main_frame, text="Visualizar Registros de Actividad", command=self.view_activity_logs).pack(fill='x')
-        tk.Button(self.main_frame, text="Encender Sistema de monitoreo", command=self.show_cameras).pack(fill='x')
-        tk.Button(self.main_frame, text="Encender Sistema de Deteccion", command=self.start_system_alarm).pack(fill='x')
-        tk.Button(self.main_frame, text="Salir", command=self.root.quit).pack(fill='x')
+        ctk.CTkLabel(self.main_frame, text="Menú de Administrador", font=("Cascadia Code Pl", 25, "bold"),
+                     text_color="#ffffff").pack(pady=20)
 
-    def monitor_menu(self, name):
+        menu_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
+        menu_frame.pack(padx=20, pady=20, fill='both', expand=True)
+
+        button_config = {
+            "width": 300,
+            "height": 50,
+            "corner_radius": 10,
+            "font": ("Cascadia Code Pl", 15),
+            "hover_color": "#ff6600",
+            "compound": "left",
+            "anchor": "w"
+        }
+
+        icon_size = (20, 20)
+        user_icon = ctk.CTkImage(Image.open("img_sistema/add-user.png"), size=icon_size)
+        camera_icon = ctk.CTkImage(Image.open("img_sistema/config_cam.png"), size=icon_size)
+        notification_icon = ctk.CTkImage(Image.open("img_sistema/config_notificaciones.png"), size=icon_size)
+        logs_icon = ctk.CTkImage(Image.open("img_sistema/registro_actv.png"), size=icon_size)
+        monitor_icon = ctk.CTkImage(Image.open("img_sistema/sist_monitoreo.png"), size=icon_size)
+        detection_icon = ctk.CTkImage(Image.open("img_sistema/deteccion_st.png"), size=icon_size)
+        exit_icon = ctk.CTkImage(Image.open("img_sistema/salir.png"), size=icon_size)
+
+        ctk.CTkButton(menu_frame, text="Registrar Usuario", image=user_icon, command=self.register_user,
+                      **button_config).pack(pady=10, padx=10)
+        ctk.CTkButton(menu_frame, text="Configurar Cámaras", image=camera_icon, command=self.configure_cameras,
+                      **button_config).pack(pady=10, padx=10)
+        ctk.CTkButton(menu_frame, text="Configurar Notificaciones", image=notification_icon,
+                      command=self.configure_notifications, **button_config).pack(pady=10, padx=10)
+        ctk.CTkButton(menu_frame, text="Visualizar Registros de Actividad", image=logs_icon,
+                      command=self.view_activity_logs, **button_config).pack(pady=10, padx=10)
+        ctk.CTkButton(menu_frame, text="Encender Sistema de Monitoreo", image=monitor_icon, command=self.show_cameras,
+                      **button_config).pack(pady=10, padx=10)
+        ctk.CTkButton(menu_frame, text="Encender Sistema de Detección", image=detection_icon,
+                      command=self.start_system_alarm, **button_config).pack(pady=10, padx=10)
+        ctk.CTkButton(menu_frame, text="Salir", image=exit_icon, command=self.root.quit,
+                      **button_config).pack(pady=10, padx=10)
+
+        self.main_frame.configure(fg_color="#333333")
+        self.root.configure(bg="#333333")
+
+        self.main_frame.grid_columnconfigure(0, weight=1)
+        self.main_frame.grid_columnconfigure(1, weight=1)
+
+    def monitor_menu(self):
         self.clear_frame()
-        tk.Label(self.main_frame, text=f"Bienvenido, {name[1]}").pack()
+        #ctk.CTkLabel(self.main_frame, text=f"Bienvenido, {name[1]}").pack()
 
-        tk.Button(self.main_frame, text="Configurar Cámaras", command=self.configure_cameras).pack(fill='x')
-        tk.Button(self.main_frame, text="Encender Sistema de monitoreo", command=self.show_cameras).pack(fill='x')
-        tk.Button(self.main_frame, text="Encender Sistema de Deteccion", command=self.start_system_alarm).pack(fill='x')
-        tk.Button(self.main_frame, text="Salir", command=self.root.quit).pack(fill='x')
+        ctk.CTkButton(self.main_frame, text="Configurar Cámaras", command=self.configure_cameras).pack(fill='x')
+        ctk.CTkButton(self.main_frame, text="Encender Sistema de monitoreo", command=self.show_cameras).pack(fill='x')
+        ctk.CTkButton(self.main_frame, text="Encender Sistema de Deteccion", command=self.start_system_alarm).pack(fill='x')
+        ctk.CTkButton(self.main_frame, text="Salir", command=self.root.quit).pack(fill='x')
 
     def register_user(self):
         self.clear_frame()
-        tk.Label(self.main_frame, text="Registrar Usuario").pack()
 
-        tk.Label(self.main_frame, text="Usuario").pack()
-        self.username_entry = tk.Entry(self.main_frame)
+        ctk.CTkLabel(self.main_frame, text="Registrar Usuario", font=("Cascadia Code Pl", 25, "bold"),
+                     text_color="#ffffff").pack(pady=20)
+
+        form_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
+        form_frame.pack(padx=20, pady=20, fill='both', expand=True)
+
+        field_config = {
+            "font": ("Cascadia Code Pl", 15),
+            "text_color": "#ffffff",
+            "corner_radius": 10,
+            "padx": 10,
+            "pady": 10
+        }
+
+        entry_config = {
+            "width": 300,
+            "height": 30,
+            "corner_radius": 10,
+            "font": ("Cascadia Code Pl", 15)
+        }
+
+        user_icon = ctk.CTkImage(Image.open("img_sistema/add-user.png"), size=(20, 20))
+        ctk.CTkLabel(form_frame, text="Usuario", image=user_icon, compound="left", anchor='w', **field_config).pack()
+        self.username_entry = ctk.CTkEntry(form_frame, **entry_config)
         self.username_entry.pack()
 
-        tk.Label(self.main_frame, text="Contraseña").pack()
-        self.password_entry = tk.Entry(self.main_frame, show="*")
+        pass_icon = ctk.CTkImage(Image.open("img_sistema/password-logo.png"), size=(20, 20))
+        ctk.CTkLabel(form_frame, text="Contraseña", image=pass_icon, compound="left", anchor='w', **field_config).pack()
+        self.password_entry = ctk.CTkEntry(form_frame, show="*", **entry_config)
         self.password_entry.pack()
 
-        tk.Label(self.main_frame, text="Correo Electrónico").pack()
-        self.email_entry = tk.Entry(self.main_frame)
+        email_icon = ctk.CTkImage(Image.open("img_sistema/email.png"), size=(20, 20))
+        ctk.CTkLabel(form_frame, text="Correo Electrónico", image=email_icon, compound="left", anchor='w',
+                     **field_config).pack()
+        self.email_entry = ctk.CTkEntry(form_frame, **entry_config)
         self.email_entry.pack()
 
-        tk.Label(self.main_frame, text="Celular").pack()
-        self.celular_entry = tk.Entry(self.main_frame)
+        phone_icon = ctk.CTkImage(Image.open("img_sistema/phone.png"), size=(20, 20))
+        ctk.CTkLabel(form_frame, text="Celular", image=phone_icon, compound="left", anchor='w', **field_config).pack()
+        self.celular_entry = ctk.CTkEntry(form_frame, **entry_config)
         self.celular_entry.pack()
 
-        #roles de la base de datos
         roles = get_roles()
+        role_names = [role[1] for role in roles]
 
-        # Extraer los nombres de los roles
-        role_names = [role[1] for role in roles]  # Asume que el nombre del rol es el segundo elemento de cada tupla
-
-        tk.Label(self.main_frame, text="Rol").pack()
-        self.role_var = tk.StringVar(self.main_frame)
-
-        # Establecer el valor predeterminado como el primer rol en la lista, si la lista no está vacía
+        ctk.CTkLabel(form_frame, text="Rol", **field_config).pack()
+        self.role_var = ctk.StringVar(form_frame)
         if role_names:
             self.role_var.set(role_names[0])
 
-        # Pasar la lista de nombres de roles al OptionMenu
-        self.role_option = tk.OptionMenu(self.main_frame, self.role_var, *role_names)
-        self.role_option.pack()
+        self.role_option = ctk.CTkOptionMenu(
+            form_frame,
+            variable=self.role_var,
+            values=role_names,
+            font=("Cascadia Code Pl", 15),
+            fg_color="#333333",
+            button_color="#444444",
+            button_hover_color="#555555",
+            text_color="#ffffff",
+            dropdown_fg_color="#333333",
+            dropdown_hover_color="#444444"
+        )
+        self.role_option.pack(pady=10)
 
-        tk.Button(self.main_frame, text="Capturar Rostro", command=self.capture_face_for_registration).pack()
+        ctk.CTkButton(form_frame, text="Capturar Rostro", command=self.capture_face_for_registration,
+                      width=300, height=50, corner_radius=10, font=("Cascadia Code Pl", 15),
+                      hover_color="#ff6600").pack(pady=20)
 
-        tk.Button(self.main_frame, text="Volver", command=self.admin_menu).pack()
+        ctk.CTkButton(form_frame, text="Volver", command=self.load_interface_by_role,
+                      width=300, height=50, corner_radius=10, font=("Cascadia Code Pl", 15),
+                      hover_color="#ff6600").pack(pady=10)
+
+        self.main_frame.configure(fg_color="#333333")
+        self.root.configure(bg="#333333")
 
     def capture_face_for_registration(self):
         if not self.username_entry.get() or not self.password_entry.get() or not self.email_entry.get():
@@ -198,7 +311,7 @@ class App:
 
         cv2.namedWindow("Captura de Rostro")
         while True:
-            ret, frame = self.camera.get_frame()  # Asegurarse de capturar correctamente ret y frame
+            ret, frame = self.camera.get_frame()
             if ret:
                 cv2.imshow("Captura de Rostro", frame)
                 if cv2.waitKey(1) & 0xFF == 27:  # Presiona ESC para capturar el rostro
@@ -229,45 +342,58 @@ class App:
 
     def configure_cameras(self):
         self.clear_frame()
-        tk.Label(self.main_frame, text="Configurar Cámaras").pack()
+        ctk.CTkLabel(self.main_frame, text="Configurar Cámaras", font=("Cascadia Code Pl", 25, "bold"),
+                     text_color="#ffffff").pack(pady=20)
 
-        tk.Button(self.main_frame, text="Agregar Cámara", command=self.add_camera).pack(fill='x')
-        tk.Button(self.main_frame, text="Volver", command=self.admin_menu).pack()
+        camera_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
+        camera_frame.pack(padx=20, pady=20, fill='both', expand=True)
+
+        button_config = {
+            "width": 300,
+            "height": 50,
+            "corner_radius": 10,
+            "font": ("Cascadia Code Pl", 15),
+            "hover_color": "#ff6600",
+            "compound": "left",
+            "anchor": "w"
+        }
+
+        add_camera_icon = ctk.CTkImage(Image.open("img_sistema/config_cam.png"), size=(20, 20))
+        back_icon = ctk.CTkImage(Image.open("img_sistema/volver_icon.png"), size=(20, 20))
+
+        ctk.CTkButton(camera_frame, text="Agregar Cámara", image=add_camera_icon, command=self.add_camera,
+                      **button_config).pack(pady=10)
+        ctk.CTkButton(camera_frame, text="Volver", image=back_icon, command=self.load_interface_by_role, **button_config).pack(
+            pady=10)
 
     def add_camera(self):
-        source = simpledialog.askstring("URL de Cámara IP", "Ingrese la URL de la cámara IP o el índice de la cámara web (e.g., 0 para la primera cámara web):")
+        source = simpledialog.askstring("URL de Cámara IP",
+                                        "Ingrese la URL de la cámara IP o el índice de la cámara web (e.g., 0 para la primera cámara web):")
         if not source:
             messagebox.showerror("Error", "URL de la cámara IP no válida")
             return
 
-        # Convertir el source a int si es posible
         try:
             source = int(source)
         except ValueError:
             pass
 
-        # Verificar si la cámara ya está en la lista
         for cam in self.cameras:
             if cam.source == source:
                 messagebox.showinfo("Info", "La cámara ya está en la lista")
                 return
 
-        # Preguntar por la zona
         zone = simpledialog.askstring("Zona de la Cámara", "Ingrese la zona de la cámara (e.g., zona 1):")
         if not zone:
             messagebox.showerror("Error", "Zona no válida")
             return
 
-        # Verificar si la zona ya está en la lista
         if zone in self.zones:
             messagebox.showinfo("Info", "La zona ya está en la lista")
             return
 
-
-
         new_camera = Camera(source, zone)
         if new_camera.open():
-            # Mostrar lo que la cámara ve
             while True:
                 ret, frame = new_camera.cap.read()
                 if not ret:
@@ -278,7 +404,7 @@ class App:
                 cv2.imshow('Vista previa: ESC para cancelar, Y para agregar', frame)
                 key = cv2.waitKey(1)
                 if key == ord('y') or key == ord('Y'):
-                    new_camera.close()  # Cerrar la cámara después de verificar
+                    new_camera.close()
                     self.cameras.append(new_camera)
                     self.zones.append(zone)
                     cv2.destroyAllWindows()
@@ -292,74 +418,93 @@ class App:
         else:
             messagebox.showerror("Error", "No se pudo abrir la cámara")
 
-
-    def configure_notifications(self):
+    def configure_notifications(self, button_config=None):
         self.clear_frame()
-        tk.Label(self.main_frame, text="Configurar Notificaciones").pack()
+        ctk.CTkLabel(self.main_frame, text="Configurar Notificaciones", font=("Cascadia Code Pl", 25, "bold"),
+                     text_color="#ffffff").pack(pady=20)
 
-        tk.Label(self.main_frame, text="Email de Notificación").pack()
-        self.notification_email_entry = tk.Entry(self.main_frame)
-        self.notification_email_entry.pack()
+        notification_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
+        notification_frame.pack(padx=20, pady=20, fill='both', expand=True)
 
-        tk.Button(self.main_frame, text="Guardar", command=self.save_notifications).pack(fill='x')
-        tk.Button(self.main_frame, text="Volver", command=self.admin_menu).pack()
+        input_config = {
+            "width": 300,
+            "height": 40,
+            "corner_radius": 10,
+            "font": ("Cascadia Code Pl", 15)
+        }
+
+        ctk.CTkLabel(notification_frame, text="Email de Notificación").pack(pady=10)
+        self.notification_email_entry = ctk.CTkEntry(notification_frame, **input_config)
+        self.notification_email_entry.pack(pady=10)
+
+        if button_config is None:
+            button_config = {
+                "width": 300,
+                "height": 50,
+                "corner_radius": 10,
+                "font": ("Cascadia Code Pl", 15),
+                "hover_color": "#ff6600"
+            }
+
+        ctk.CTkButton(notification_frame, text="Guardar", command=self.save_notifications, **button_config).pack(
+            pady=10)
+        ctk.CTkButton(notification_frame, text="Volver", command=self.load_interface_by_role, **button_config).pack(pady=10)
+
+        notification_frame.grid_columnconfigure(0, weight=1)
+        notification_frame.grid_columnconfigure(1, weight=1)
 
     def save_notifications(self):
         notification_email = self.notification_email_entry.get()
-        # Implementa el guardado de la dirección de correo electrónico para notificaciones aquí
         messagebox.showinfo("Notificaciones", "Funcionalidad en desarrollo")
 
     def view_activity_logs(self):
-        # Implementa la visualización de registros de actividad aquí
         messagebox.showinfo("Registros de Actividad", "Funcionalidad en desarrollo")
 
     def show_cameras(self):
         self.clear_frame()
-        self.loading_label = tk.Label(self.main_frame, text="Cargando cámaras...")
+        self.loading_label = ctk.CTkLabel(self.main_frame, text="Cargando cámaras...", font=("Cascadia Code Pl", 15))
         self.loading_label.pack()
         self.root.update_idletasks()
 
-        # Abre todas las cámaras
         for camera in self.cameras:
             if not camera.open():
                 messagebox.showerror("Error", f"No se pudo abrir la cámara con source {camera.source}")
                 return
 
-        # Eliminar el mensaje de carga y mostrar las cámaras
         self.loading_label.destroy()
-        tk.Label(self.main_frame, text="Visualización de Cámaras").pack()
+        ctk.CTkLabel(self.main_frame, text="Visualización de Cámaras", font=("Cascadia Code Pl", 20, "bold")).pack()
 
-        cameras_frame = tk.Frame(self.main_frame)
-        cameras_frame.pack(fill=tk.BOTH, expand=True)
+        cameras_frame = ctk.CTkFrame(self.main_frame)
+        cameras_frame.pack(fill=ctk.BOTH, expand=True)
 
         num_columns = 2
         num_cameras = len(self.cameras)
         num_rows = (num_cameras + num_columns - 1) // num_columns
 
-        row_frames = [tk.Frame(cameras_frame) for _ in range(num_rows)]
+        row_frames = [ctk.CTkFrame(cameras_frame) for _ in range(num_rows)]
         for rf in row_frames:
-            rf.pack(fill=tk.BOTH, expand=True)
+            rf.pack(fill=ctk.BOTH, expand=True)
 
         for i, camera in enumerate(self.cameras):
             row = i // num_columns
             col = i % num_columns
 
-            frame = tk.Frame(row_frames[row])
-            frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+            frame = ctk.CTkFrame(row_frames[row])
+            frame.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True, padx=5, pady=5)
 
-            label = tk.Label(frame, text=f"Cámara {i+1}, {camera.zone}")
+            label = ctk.CTkLabel(frame, text=f"Cámara {i + 1}, {camera.zone}", font=("Cascadia Code Pl", 15))
             label.pack()
 
-            canvas = tk.Canvas(frame, width=320, height=240)
-            canvas.pack(fill=tk.BOTH, expand=True)
+            canvas = ctk.CTkCanvas(frame, width=320, height=240)
+            canvas.pack(fill=ctk.BOTH, expand=True)
 
             self.update_camera_check(camera, canvas)
-            # Agregar un botón para cada cámara que llama a la función alert_zone
-            tk.Button(frame, text="WhatsApp Zona", command=lambda zone=camera.zone: self.alert_zone(zone)).pack()
+            ctk.CTkButton(frame, text="WhatsApp Zona", command=lambda zone=camera.zone: self.alert_zone(zone)).pack()
 
+        ctk.CTkButton(self.main_frame, text="Sonar Alerta", command=self.sound_alert).pack()
 
-        tk.Button(self.main_frame, text="Sonar Alerta", command=self.sound_alert).pack()
-        tk.Button(self.main_frame, text="Volver", command=self.close_cameras).pack()
+        ctk.CTkButton(self.main_frame, text="Volver", command=self.close_cameras).pack()
+
     def update_camera_check(self, camera, canvas):
         def update():
             ret, frame = camera.get_frame()
@@ -367,45 +512,44 @@ class App:
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 img = Image.fromarray(frame)
 
-                # Redimensionar la imagen para que se ajuste al canvas solo si cambia el tamaño del canvas
                 canvas_width = canvas.winfo_width()
                 canvas_height = canvas.winfo_height()
                 if canvas_width != img.width or canvas_height != img.height:
                     img = img.resize((canvas_width, canvas_height), Image.Resampling.LANCZOS)
 
                 imgtk = ImageTk.PhotoImage(image=img)
-                canvas.create_image(0, 0, anchor=tk.NW, image=imgtk)
+                canvas.create_image(0, 0, anchor=ctk.NW, image=imgtk)
                 canvas.imgtk = imgtk
 
-            canvas.after(30, update)  # Actualizar cada 30 ms en lugar de 10 ms
+            canvas.after(30, update)
 
         update()
+
     def start_system_alarm(self):
         self.clear_frame()
-        self.loading_label = tk.Label(self.main_frame, text="Cargando cámaras...")
+        self.loading_label = ctk.CTkLabel(self.main_frame, text="Cargando cámaras...", font=("Cascadia Code Pl", 15))
         self.loading_label.pack()
         self.root.update_idletasks()
 
-        # Abre todas las cámaras
         for camera in self.cameras:
             if not camera.open():
                 messagebox.showerror("Error", f"No se pudo abrir la cámara con source {camera.source}")
                 return
 
-        # Eliminar el mensaje de carga y mostrar las cámaras
         self.loading_label.destroy()
-        tk.Label(self.main_frame, text="Sistema de Alarma - Detección de Personas").pack()
+        ctk.CTkLabel(self.main_frame, text="Sistema de Alarma - Detección de Personas",
+                     font=("Cascadia Code Pl", 20, "bold")).pack()
 
-        cameras_frame = tk.Frame(self.main_frame)
-        cameras_frame.pack(fill=tk.BOTH, expand=True)
+        cameras_frame = ctk.CTkFrame(self.main_frame)
+        cameras_frame.pack(fill=ctk.BOTH, expand=True)
 
         num_columns = 2
         num_cameras = len(self.cameras)
         num_rows = (num_cameras + num_columns - 1) // num_columns
 
-        row_frames = [tk.Frame(cameras_frame) for _ in range(num_rows)]
+        row_frames = [ctk.CTkFrame(cameras_frame) for _ in range(num_rows)]
         for rf in row_frames:
-            rf.pack(fill=tk.BOTH, expand=True)
+            rf.pack(fill=ctk.BOTH, expand=True)
 
         self.running = True
 
@@ -413,25 +557,23 @@ class App:
             row = i // num_columns
             col = i % num_columns
 
-            frame = tk.Frame(row_frames[row])
-            frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+            frame = ctk.CTkFrame(row_frames[row])
+            frame.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True, padx=5, pady=5)
 
-            label = tk.Label(frame, text=f"Cámara {i+1}, Zone {camera.zone}")
+            label = ctk.CTkLabel(frame, text=f"Cámara {i + 1}, Zone {camera.zone}", font=("Cascadia Code Pl", 15))
             label.pack()
 
-            canvas = tk.Canvas(frame, width=320, height=240)
-            canvas.pack(fill=tk.BOTH, expand=True)
+            canvas = ctk.CTkCanvas(frame, width=320, height=240)
+            canvas.pack(fill=ctk.BOTH, expand=True)
 
-            # Crear una cola para cada cámara
             q = queue.Queue()
             t = threading.Thread(target=self.update_camera_view, args=(camera, q, True))
             t.start()
             self.threads.append(t)
 
-            # Actualizar la vista de la cámara en el hilo principal de Tkinter
             self.root.after(100, self.update_canvas, canvas, q)
 
-        tk.Button(self.main_frame, text="Volver", command=self.close_cameras).pack()
+        ctk.CTkButton(self.main_frame, text="Volver", command=self.close_cameras).pack()
 
     def update_camera_view(self, camera, q, detect_person=False):
         while self.running:
@@ -441,28 +583,26 @@ class App:
                     frame, detections,save_image = self.detector.detect(frame)
                     if save_image:
                         current_time = time.time()
-                        if current_time - self.last_email_time > self.email_interval:
-                            # Iniciar un nuevo hilo para guardar la imagen y enviar el correo
-                            #filename = self.detector.save_image(frame)
-                            threading.Thread(target=self.save_image_send_notification, args=(frame,)).start()
-                            self.last_email_time = current_time
+                        if current_time - self.last_save_image_time > self.save_image_interval:
+                            threading.Thread(target=self.save_image, args=(frame,)).start()
+                            #self.last_email_time = current_time
                         if current_time - self.last_whatsapp_alert_time > self.whatsapp_alert_interval:
                             threading.Thread(target=self.send_whatsapp_alert_detection).start()
                             self.whatsapp_alert_sent = True
                             self.last_whatsapp_alert_time = current_time
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 img = Image.fromarray(frame)
-                q.put(img)  # Poner la imagen en la cola
-                time.sleep(0.1)  # Esperar 100 ms
+                q.put(img)
+                time.sleep(0.1)
 
     def update_canvas(self, canvas, q):
-        if not canvas.winfo_exists():  # Verificar si el canvas todavía existe
+        if not canvas.winfo_exists():
             return
 
         try:
-            img = q.get_nowait()  # Obtener la imagen de la cola
+            img = q.get_nowait()
         except queue.Empty:
-            pass  # No hacer nada si la cola está vacía
+            pass
         else:
             canvas_width = canvas.winfo_width()
             canvas_height = canvas.winfo_height()
@@ -470,11 +610,11 @@ class App:
                 img = img.resize((canvas_width, canvas_height), Image.Resampling.LANCZOS)
 
             imgtk = ImageTk.PhotoImage(image=img)
-            canvas.create_image(0, 0, anchor=tk.NW, image=imgtk)
+            canvas.create_image(0, 0, anchor=ctk.NW, image=imgtk)
             canvas.imgtk = imgtk
 
         if self.running:
-            self.root.after(100, self.update_canvas, canvas, q)  # Actualizar cada 100 ms
+            self.root.after(100, self.update_canvas, canvas, q)
 
     def close_cameras(self):
         self.running = False
@@ -484,10 +624,16 @@ class App:
         for camera in self.cameras:
             camera.close()
         self.clear_frame()
-        self.admin_menu()
-
-
-
+        self.load_interface_by_role()
+    def load_interface_by_role(self):
+        if self.current_role == 1:
+            self.admin_menu()
+        elif self.current_role == 2:
+            self.monitor_menu()
+        else:
+            self.admin_menu()
+            ctk.CTkLabel(self.main_frame, text=f"Bienvenido, {self.current_role}").pack()
+       
     def sound_alert(self):
         threading.Thread(target=self.play_sound).start()
 
@@ -515,20 +661,23 @@ class App:
         time.sleep(self.whatsapp_alert_interval)
         self.whatsapp_alert_sent = False
 
-    def save_image_send_notification(self, image):
-        filename = self.detector.save_image(image)
-        self.send_email_notification(filename)
+    def save_image(self, image):
+        local_path = self.detector.save_image(image)
 
-    def send_email_notification(self, filename):
-        # Implementa el envío de notificaciones por correo electrónico aquí
-        send_email(filename)
+        # Sube el archivo a Google Drive en un hilo separado
+        thread = threading.Thread(target=upload_to_drive, args=(self.service, local_path, self.folder_id))
+        thread.start()
+
+        folder_url = f"https://drive.google.com/drive/folders/{self.folder_id}"
+        #print(f'File uploaded. Folder URL: {folder_url}')
+        send_email(folder_url)
 
 
-def get_all_users():
-    return get_users()
 
-def get_role_by_id(role_id):
-    return get_role_user(role_id)
+
+
+
+
 
 if __name__ == "__main__":
     init_db()
@@ -538,6 +687,6 @@ if __name__ == "__main__":
         add_role('General')
         register_user('admin', 'admin', 'admin@example.com', '941768950', get_role('Admin')[0], None)
 
-    root = tk.Tk()
+    root = ctk.CTk()
     app = App(root)
     root.mainloop()

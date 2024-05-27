@@ -2,3 +2,5 @@
 src/old/
 src/secret.txt
 src/users.db
+src/credentials.json
+src/token.pickle
