@@ -66,20 +66,7 @@ class MobileNetSSD:
 
         return frame, person_detections,save_image
 
-    # def save_image(self, image):
-    #     filename = '../images/detection_{}.png'.format(int(time.time()))
-    #     if os.path.exists(filename):
-    #         os.remove(filename)
-    #     cv2.imwrite(filename, image)
-    #     return filename
 
-    # def save_image(self, image):
-    #     filename = f'detection_{int(time.time())}.png'
-    #     local_path = f'../images/{filename}'
-    #     if os.path.exists(local_path):
-    #         os.remove(local_path)
-    #     cv2.imwrite(local_path, cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR))
-    #     return local_path
     def save_image(self, image):
         # Obtener la fecha y hora actual
         now = datetime.now()
@@ -96,10 +83,10 @@ class MobileNetSSD:
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
 
         # Convertir la imagen de PIL a OpenCV formato (RGB a BGR)
-        image_bgr = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+       # image_bgr = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
         # Guardar la imagen
-        cv2.imwrite(local_path, image_bgr)
+        cv2.imwrite(local_path, image)
 
         #print(f'Imagen guardada en: {local_path}')
         threading.Thread(target=upload_to_drive, args=(self.service, local_path, self.folder_id)).start()

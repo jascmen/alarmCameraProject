@@ -16,7 +16,7 @@ import threading
 import queue
 import pygame
 
-from notifications import send_whatsapp_zone, send_email, send_whatsapp_admin
+from notifications import send_whatsapp_zone, send_email, send_whatsapp_admin, send_whatsapp_alert_failed_autentication
 from towfactor import generate_secret, save_secret, generate_qr_code, verify_code, load_secret
 
 
@@ -43,52 +43,50 @@ class App:
         self.last_whatsapp_alert_time = 0
         self.secret = load_secret()
 
-
-
-
-
-
     def login_screen(self):
         self.clear_frame()
 
+        self.root.geometry("800x330")  # Establecer tamaño inicial de la ventana
+        self.root.minsize(800, 330)  # Establecer tamaño mínimo de la ventana
+
         logo_frame = ctk.CTkFrame(self.main_frame)
         logo_frame.grid(row=0, column=0, rowspan=5, padx=20, pady=20, sticky="ns")
-        system_name_label = ctk.CTkLabel(logo_frame, text="ALERTSHIELD", font=("Cascadia Code Pl", 25, "bold"), text_color="red")
+        system_name_label = ctk.CTkLabel(logo_frame, text="ALERTSHIELD", font=("Cascadia Code Pl", 28, "bold"),
+                                         text_color="red")
         system_name_label.pack(pady=(0, 10))
         logo_image = ctk.CTkImage(Image.open("img_sistema/LOGO ALERTSHIELD.jpg"), size=(200, 200))
         logo_label = ctk.CTkLabel(logo_frame, image=logo_image, text="")
         logo_label.pack(pady=10)
 
-        ctk.CTkLabel(self.main_frame, text="Inicio de Sesión", font=("Cascadia Code Pl", 20)).grid(row=0, column=1, columnspan=2,
+        ctk.CTkLabel(self.main_frame, text="Inicio de Sesión", font=("Cascadia Code Pl", 24)).grid(row=0, column=1,
+                                                                                                   columnspan=2,
                                                                                                    pady=20)
 
         user_icon = ctk.CTkImage(Image.open("img_sistema/user-logo.png"), size=(20, 20))
-        ctk.CTkLabel(self.main_frame, text="  Usuario", font=("Cascadia Code Pl", 15), image=user_icon, compound="left", anchor='w').grid(row=1,
-                                                                                                                                          column=1,
-                                                                                                                                          sticky="ew",
-                                                                                                                                          padx=10,
-                                                                                                                                          pady=(10, 5))
-        self.username_entry = ctk.CTkEntry(self.main_frame)
+        ctk.CTkLabel(self.main_frame, text="  Usuario", font=("Cascadia Code Pl", 18), image=user_icon, compound="left",
+                     anchor='w').grid(row=1, column=1, sticky="ew", padx=10, pady=(10, 5))
+        self.username_entry = ctk.CTkEntry(self.main_frame, width=300, height=40, font=("Cascadia Code Pl", 18))
         self.username_entry.grid(row=1, column=2, sticky="ew", padx=10, pady=(10, 5))
 
         pass_icon = ctk.CTkImage(Image.open("img_sistema/password-logo.png"), size=(20, 20))
-        ctk.CTkLabel(self.main_frame, text="  Contraseña", font=("Cascadia Code Pl", 15), image=pass_icon, compound="left", anchor='w').grid(row=2,
-                                                                                                                                             column=1,
-                                                                                                                                             sticky="ew",
-                                                                                                                                             padx=10,
-                                                                                                                                             pady=(
-                                                                                                                                                 5, 10))
-        self.password_entry = ctk.CTkEntry(self.main_frame, show="*")
+        ctk.CTkLabel(self.main_frame, text="  Contraseña", font=("Cascadia Code Pl", 18), image=pass_icon,
+                     compound="left", anchor='w').grid(row=2, column=1, sticky="ew", padx=10, pady=(5, 10))
+        self.password_entry = ctk.CTkEntry(self.main_frame, show="*", width=300, height=40,
+                                           font=("Cascadia Code Pl", 18))
         self.password_entry.grid(row=2, column=2, sticky="ew", padx=10, pady=(5, 10))
 
-        ctk.CTkButton(self.main_frame, text="Login", font=("Cascadia Code Pl", 13), command=self.login).grid(row=3, column=1, columnspan=2, pady=10)
-
-        ctk.CTkButton(self.main_frame, text="Login con Rostro", font=("Cascadia Code Pl", 13), command=self.login_with_face).grid(row=4, column=1,
-                                                                                                                                  columnspan=2,
-                                                                                                                                  pady=10)
+        ctk.CTkButton(self.main_frame, text="Login", font=("Cascadia Code Pl", 18), command=self.login, width=300,
+                      height=50, corner_radius=15, fg_color="#3B82F6", hover_color="#2563EB",
+                      text_color="#FFFFFF").grid(row=3, column=1, columnspan=2, pady=10)
+        ctk.CTkButton(self.main_frame, text="Login con Rostro", font=("Cascadia Code Pl", 18),
+                      command=self.login_with_face, width=300, height=50, corner_radius=15, fg_color="#3B82F6",
+                      hover_color="#2563EB", text_color="#FFFFFF").grid(row=4, column=1, columnspan=2, pady=10)
 
         self.main_frame.grid_columnconfigure(1, weight=1)
         self.main_frame.grid_columnconfigure(2, weight=1)
+
+        self.main_frame.configure(fg_color="#1E1E1E")
+        self.root.configure(bg="#1E1E1E")
 
     def clear_frame(self):
         for widget in self.main_frame.winfo_children():
@@ -160,33 +158,62 @@ class App:
             messagebox.showerror("Error", "Rostro no reconocido")
             self.login_screen()
 
-    def load_user_interface(self,username, role_id):
+    def load_user_interface(self, username, role_id):
         self.clear_frame()
+
+        # Obtener el rol y el nombre del usuario
         role = get_role_user(role_id)
         name = get_user(username)
         self.current_role = role[0]
+
+        # Configurar estilos
+        label_config = {
+            "font": ("Cascadia Code Pl", 24, "bold"),
+            "text_color": "#FFFFFF",
+            "padx": 20,
+            "pady": 10
+        }
+
+        # Mostrar diferentes menús basados en el rol del usuario
         if role[0] == 1:
             self.admin_menu()
         elif role[0] == 2:
             self.monitor_menu()
         else:
-            ctk.CTkLabel(self.main_frame, text=f"Bienvenido, {name[1]}").pack()
+            welcome_label = ctk.CTkLabel(
+                self.main_frame,
+                text=f"Bienvenido, {name[1]}",
+                **label_config
+            )
+            welcome_label.pack(pady=20)
+
+        # Fondo del main_frame
+        self.main_frame.configure(fg_color="#1E1E1E")
 
     def admin_menu(self):
         self.clear_frame()
 
-        ctk.CTkLabel(self.main_frame, text="Menú de Administrador", font=("Cascadia Code Pl", 25, "bold"),
-                     text_color="#ffffff").pack(pady=20)
+        self.root.geometry("600x620")
+        self.root.minsize(600, 620)
 
-        menu_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
+        ctk.CTkLabel(
+            self.main_frame,
+            text="Menú de Administrador",
+            font=("Cascadia Code Pl", 28, "bold"),
+            text_color="#FF5555"
+        ).pack(pady=20)
+
+        menu_frame = ctk.CTkFrame(self.main_frame, corner_radius=15, fg_color="#2D2D2D")
         menu_frame.pack(padx=20, pady=20, fill='both', expand=True)
 
         button_config = {
             "width": 300,
             "height": 50,
-            "corner_radius": 10,
-            "font": ("Cascadia Code Pl", 15),
-            "hover_color": "#ff6600",
+            "corner_radius": 15,
+            "font": ("Cascadia Code Pl", 18),
+            "hover_color": "#FF5555",
+            "fg_color": "#3B82F6",
+            "text_color": "#FFFFFF",
             "compound": "left",
             "anchor": "w"
         }
@@ -201,86 +228,153 @@ class App:
         exit_icon = ctk.CTkImage(Image.open("img_sistema/salir.png"), size=icon_size)
 
         ctk.CTkButton(menu_frame, text="Registrar Usuario", image=user_icon, command=self.register_user,
-                      **button_config).pack(pady=10, padx=10)
-        #boton para vincular autenticador de google
-        ctk.CTkButton(menu_frame, text="Vincular Autenticador de Google", image=user_icon, command=self.link_autenticator,**button_config).pack(pady=10, padx=10)
+                      **button_config).pack(pady=10)
+        ctk.CTkButton(menu_frame, text="Vincular Autenticador de Google", image=user_icon,
+                      command=self.link_autenticator, **button_config).pack(pady=10)
         ctk.CTkButton(menu_frame, text="Configurar Cámaras", image=camera_icon, command=self.configure_cameras,
-                      **button_config).pack(pady=10, padx=10)
+                      **button_config).pack(pady=10)
         # ctk.CTkButton(menu_frame, text="Configurar Notificaciones", image=notification_icon,
-        #               command=self.configure_notifications, **button_config).pack(pady=10, padx=10)
+        #               command=self.configure_notifications, **button_config).pack(pady=10)
         ctk.CTkButton(menu_frame, text="Visualizar Registros de Actividad", image=logs_icon,
-                      command=self.view_activity_logs, **button_config).pack(pady=10, padx=10)
+                      command=self.view_activity_logs, **button_config).pack(pady=10)
         ctk.CTkButton(menu_frame, text="Encender Sistema de Monitoreo", image=monitor_icon, command=self.show_cameras,
-                      **button_config).pack(pady=10, padx=10)
+                      **button_config).pack(pady=10)
         ctk.CTkButton(menu_frame, text="Encender Sistema de Detección", image=detection_icon,
-                      command=self.start_system_alarm, **button_config).pack(pady=10, padx=10)
+                      command=self.start_system_alarm, **button_config).pack(pady=10)
         ctk.CTkButton(menu_frame, text="Salir", image=exit_icon, command=self.root.quit,
-                      **button_config).pack(pady=10, padx=10)
+                      **button_config).pack(pady=10)
 
-        self.main_frame.configure(fg_color="#333333")
-        self.root.configure(bg="#333333")
+        self.main_frame.configure(fg_color="#1E1E1E")
+        self.root.configure(bg="#1E1E1E")
 
         self.main_frame.grid_columnconfigure(0, weight=1)
         self.main_frame.grid_columnconfigure(1, weight=1)
 
     def monitor_menu(self):
         self.clear_frame()
-        #ctk.CTkLabel(self.main_frame, text=f"Bienvenido, {name[1]}").pack()
 
-        ctk.CTkButton(self.main_frame, text="Configurar Cámaras", command=self.configure_cameras).pack(fill='x')
-        ctk.CTkButton(self.main_frame, text="Encender Sistema de monitoreo", command=self.show_cameras).pack(fill='x')
-        #ctk.CTkButton(self.main_frame, text="Encender Sistema de Deteccion", command=self.start_system_alarm).pack(fill='x')
-        ctk.CTkButton(self.main_frame, text="Salir", command=self.root.quit).pack(fill='x')
+        ctk.CTkLabel(
+            self.main_frame,
+            text="Menú de Monitoreo",
+            font=("Cascadia Code Pl", 28, "bold"),
+            text_color="#FF5555"
+        ).pack(pady=20)
+
+        menu_frame = ctk.CTkFrame(self.main_frame, corner_radius=15, fg_color="#2D2D2D")
+        menu_frame.pack(padx=20, pady=20, fill='both', expand=True)
+
+        button_config = {
+            "width": 300,
+            "height": 50,
+            "corner_radius": 15,
+            "font": ("Cascadia Code Pl", 18),
+            "hover_color": "#FF5555",
+            "fg_color": "#3B82F6",
+            "text_color": "#FFFFFF",
+            "compound": "left",
+            "anchor": "w"
+        }
+
+        camera_icon = ctk.CTkImage(Image.open("img_sistema/config_cam.png"), size=(20, 20))
+        monitor_icon = ctk.CTkImage(Image.open("img_sistema/sist_monitoreo.png"), size=(20, 20))
+        exit_icon = ctk.CTkImage(Image.open("img_sistema/salir.png"), size=(20, 20))
+
+        ctk.CTkButton(menu_frame, text="Configurar Cámaras", image=camera_icon, command=self.configure_cameras,
+                      **button_config).pack(pady=10)
+        ctk.CTkButton(menu_frame, text="Encender Sistema de Monitoreo", image=monitor_icon, command=self.show_cameras,
+                      **button_config).pack(pady=10)
+        ctk.CTkButton(menu_frame, text="Salir", image=exit_icon, command=self.root.quit, **button_config).pack(pady=10)
+
+        self.main_frame.configure(fg_color="#1E1E1E")
+        self.root.configure(bg="#1E1E1E")
 
     def register_user(self):
         self.clear_frame()
 
-        ctk.CTkLabel(self.main_frame, text="Registrar Usuario", font=("Cascadia Code Pl", 25, "bold"),
-                     text_color="#ffffff").pack(pady=20)
+        self.root.geometry("600x720")
+        self.root.minsize(600, 720)
 
-        form_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
+        ctk.CTkLabel(
+            self.main_frame,
+            text="Registrar Usuario",
+            font=("Cascadia Code Pl", 28, "bold"),
+            text_color="#FF5555"
+        ).pack(pady=20)
+
+        form_frame = ctk.CTkFrame(self.main_frame, corner_radius=15, fg_color="#2D2D2D")
         form_frame.pack(padx=20, pady=20, fill='both', expand=True)
 
         field_config = {
-            "font": ("Cascadia Code Pl", 15),
-            "text_color": "#ffffff",
-            "corner_radius": 10,
-            "padx": 10,
-            "pady": 10
+            "font": ("Cascadia Code Pl", 18),
+            "text_color": "#A5A5A5"
         }
 
         entry_config = {
-            "width": 300,
-            "height": 30,
+            "width": 400,  # Aumentar el ancho de las entradas
+            "height": 40,
             "corner_radius": 10,
-            "font": ("Cascadia Code Pl", 15)
+            "font": ("Cascadia Code Pl", 18)
         }
 
-        user_icon = ctk.CTkImage(Image.open("img_sistema/add-user.png"), size=(20, 20))
-        ctk.CTkLabel(form_frame, text="Usuario", image=user_icon, compound="left", anchor='w', **field_config).pack()
-        self.username_entry = ctk.CTkEntry(form_frame, **entry_config)
-        self.username_entry.pack()
+        icon_size = (20, 20)
 
-        pass_icon = ctk.CTkImage(Image.open("img_sistema/password-logo.png"), size=(20, 20))
-        ctk.CTkLabel(form_frame, text="Contraseña", image=pass_icon, compound="left", anchor='w', **field_config).pack()
-        self.password_entry = ctk.CTkEntry(form_frame, show="*", **entry_config)
-        self.password_entry.pack()
+        user_icon = ctk.CTkImage(Image.open("img_sistema/add-user.png"), size=icon_size)
+        ctk.CTkLabel(
+            form_frame,
+            text="Usuario",
+            image=user_icon,
+            compound="left",
+            anchor='w',
+            **field_config
+        ).pack(pady=5)
+        self.username_entry = ctk.CTkEntry(form_frame, placeholder_text="Ingrese su usuario", **entry_config)
+        self.username_entry.pack(pady=5)
 
-        email_icon = ctk.CTkImage(Image.open("img_sistema/email.png"), size=(20, 20))
-        ctk.CTkLabel(form_frame, text="Correo Electrónico", image=email_icon, compound="left", anchor='w',
-                     **field_config).pack()
-        self.email_entry = ctk.CTkEntry(form_frame, **entry_config)
-        self.email_entry.pack()
+        pass_icon = ctk.CTkImage(Image.open("img_sistema/password-logo.png"), size=icon_size)
+        ctk.CTkLabel(
+            form_frame,
+            text="Contraseña",
+            image=pass_icon,
+            compound="left",
+            anchor='w',
+            **field_config
+        ).pack(pady=5)
+        self.password_entry = ctk.CTkEntry(form_frame, show="*", placeholder_text="Ingrese su contraseña",
+                                           **entry_config)
+        self.password_entry.pack(pady=5)
 
-        phone_icon = ctk.CTkImage(Image.open("img_sistema/phone.png"), size=(20, 20))
-        ctk.CTkLabel(form_frame, text="Celular", image=phone_icon, compound="left", anchor='w', **field_config).pack()
-        self.celular_entry = ctk.CTkEntry(form_frame, **entry_config)
-        self.celular_entry.pack()
+        email_icon = ctk.CTkImage(Image.open("img_sistema/email.png"), size=icon_size)
+        ctk.CTkLabel(
+            form_frame,
+            text="Correo Electrónico",
+            image=email_icon,
+            compound="left",
+            anchor='w',
+            **field_config
+        ).pack(pady=5)
+        self.email_entry = ctk.CTkEntry(form_frame, placeholder_text="Ingrese su correo electrónico", **entry_config)
+        self.email_entry.pack(pady=5)
+
+        phone_icon = ctk.CTkImage(Image.open("img_sistema/phone.png"), size=icon_size)
+        ctk.CTkLabel(
+            form_frame,
+            text="Celular",
+            image=phone_icon,
+            compound="left",
+            anchor='w',
+            **field_config
+        ).pack(pady=5)
+        self.celular_entry = ctk.CTkEntry(form_frame, placeholder_text="Ingrese su número de celular", **entry_config)
+        self.celular_entry.pack(pady=5)
 
         roles = get_roles()
         role_names = [role[1] for role in roles]
 
-        ctk.CTkLabel(form_frame, text="Rol", **field_config).pack()
+        ctk.CTkLabel(
+            form_frame,
+            text="Rol",
+            **field_config
+        ).pack(pady=5)
         self.role_var = ctk.StringVar(form_frame)
         if role_names:
             self.role_var.set(role_names[0])
@@ -289,7 +383,7 @@ class App:
             form_frame,
             variable=self.role_var,
             values=role_names,
-            font=("Cascadia Code Pl", 15),
+            font=("Cascadia Code Pl", 18),
             fg_color="#333333",
             button_color="#444444",
             button_hover_color="#555555",
@@ -299,16 +393,34 @@ class App:
         )
         self.role_option.pack(pady=10)
 
-        ctk.CTkButton(form_frame, text="Capturar Rostro", command=self.capture_face_for_registration,
-                      width=300, height=50, corner_radius=10, font=("Cascadia Code Pl", 15),
-                      hover_color="#ff6600").pack(pady=20)
+        ctk.CTkButton(
+            form_frame,
+            text="Capturar Rostro",
+            command=self.capture_face_for_registration,
+            width=300,
+            height=50,
+            corner_radius=15,
+            font=("Cascadia Code Pl", 18),
+            fg_color="#3B82F6",
+            hover_color="#2563EB",
+            text_color="#FFFFFF"
+        ).pack(pady=20)
 
-        ctk.CTkButton(form_frame, text="Volver", command=self.load_interface_by_role,
-                      width=300, height=50, corner_radius=10, font=("Cascadia Code Pl", 15),
-                      hover_color="#ff6600").pack(pady=10)
+        ctk.CTkButton(
+            form_frame,
+            text="Volver",
+            command=self.load_interface_by_role,
+            width=300,
+            height=50,
+            corner_radius=15,
+            font=("Cascadia Code Pl", 18),
+            fg_color="#3B82F6",
+            hover_color="#2563EB",
+            text_color="#FFFFFF"
+        ).pack(pady=10)
 
-        self.main_frame.configure(fg_color="#333333")
-        self.root.configure(bg="#333333")
+        self.main_frame.configure(fg_color="#1E1E1E")
+        self.root.configure(bg="#1E1E1E")
 
     def capture_face_for_registration(self):
         if not self.username_entry.get() or not self.password_entry.get() or not self.email_entry.get():
@@ -320,6 +432,7 @@ class App:
             return
 
         cv2.namedWindow("Captura de Rostro")
+        face_image = None
         while True:
             ret, frame = self.camera.get_frame()
             if ret:
@@ -327,9 +440,15 @@ class App:
                 if cv2.waitKey(1) & 0xFF == 27:  # Presiona ESC para capturar el rostro
                     face_image = frame
                     break
+            else:
+                print("No se pudo obtener el frame de la cámara")  # Mensaje de depuración
 
         cv2.destroyAllWindows()
         self.camera.close()
+
+        if face_image is None:
+            messagebox.showerror("Error", "No se pudo capturar la imagen")
+            return
 
         face_encoding = encode_face(face_image)
         if face_encoding is None:
@@ -353,18 +472,28 @@ class App:
 
     def configure_cameras(self):
         self.clear_frame()
-        ctk.CTkLabel(self.main_frame, text="Configurar Cámaras", font=("Cascadia Code Pl", 25, "bold"),
-                     text_color="#ffffff").pack(pady=20)
 
-        camera_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
+        self.root.geometry("500x300")
+        self.root.minsize(500, 300)
+
+        ctk.CTkLabel(
+            self.main_frame,
+            text="Configurar Cámaras",
+            font=("Cascadia Code Pl", 28, "bold"),
+            text_color="#FF5555"
+        ).pack(pady=20)
+
+        camera_frame = ctk.CTkFrame(self.main_frame, corner_radius=15, fg_color="#2D2D2D")
         camera_frame.pack(padx=20, pady=20, fill='both', expand=True)
 
         button_config = {
             "width": 300,
             "height": 50,
-            "corner_radius": 10,
-            "font": ("Cascadia Code Pl", 15),
-            "hover_color": "#ff6600",
+            "corner_radius": 15,
+            "font": ("Cascadia Code Pl", 18),
+            "hover_color": "#FF5555",
+            "fg_color": "#3B82F6",
+            "text_color": "#FFFFFF",
             "compound": "left",
             "anchor": "w"
         }
@@ -372,10 +501,24 @@ class App:
         add_camera_icon = ctk.CTkImage(Image.open("img_sistema/config_cam.png"), size=(20, 20))
         back_icon = ctk.CTkImage(Image.open("img_sistema/volver_icon.png"), size=(20, 20))
 
-        ctk.CTkButton(camera_frame, text="Agregar Cámara", image=add_camera_icon, command=self.add_camera,
-                      **button_config).pack(pady=10)
-        ctk.CTkButton(camera_frame, text="Volver", image=back_icon, command=self.load_interface_by_role, **button_config).pack(
-            pady=10)
+        ctk.CTkButton(
+            camera_frame,
+            text="Agregar Cámara",
+            image=add_camera_icon,
+            command=self.add_camera,
+            **button_config
+        ).pack(pady=20)
+
+        ctk.CTkButton(
+            camera_frame,
+            text="Volver",
+            image=back_icon,
+            command=self.load_interface_by_role,
+            **button_config
+        ).pack(pady=20)
+
+        self.main_frame.configure(fg_color="#1E1E1E")
+        self.root.configure(bg="#1E1E1E")
 
     def add_camera(self):
         source = simpledialog.askstring("URL de Cámara IP",
@@ -429,40 +572,6 @@ class App:
         else:
             messagebox.showerror("Error", "No se pudo abrir la cámara")
 
-    # def configure_notifications(self, button_config=None):
-    #     self.clear_frame()
-    #     ctk.CTkLabel(self.main_frame, text="Configurar Notificaciones", font=("Cascadia Code Pl", 25, "bold"),
-    #                  text_color="#ffffff").pack(pady=20)
-    #
-    #     notification_frame = ctk.CTkFrame(self.main_frame, corner_radius=10)
-    #     notification_frame.pack(padx=20, pady=20, fill='both', expand=True)
-    #
-    #     input_config = {
-    #         "width": 300,
-    #         "height": 40,
-    #         "corner_radius": 10,
-    #         "font": ("Cascadia Code Pl", 15)
-    #     }
-    #
-    #     ctk.CTkLabel(notification_frame, text="Email de Notificación").pack(pady=10)
-    #     self.notification_email_entry = ctk.CTkEntry(notification_frame, **input_config)
-    #     self.notification_email_entry.pack(pady=10)
-    #
-    #     if button_config is None:
-    #         button_config = {
-    #             "width": 300,
-    #             "height": 50,
-    #             "corner_radius": 10,
-    #             "font": ("Cascadia Code Pl", 15),
-    #             "hover_color": "#ff6600"
-    #         }
-    #
-    #     ctk.CTkButton(notification_frame, text="Guardar", command=self.save_notifications, **button_config).pack(
-    #         pady=10)
-    #     ctk.CTkButton(notification_frame, text="Volver", command=self.load_interface_by_role, **button_config).pack(pady=10)
-    #
-    #     notification_frame.grid_columnconfigure(0, weight=1)
-    #     notification_frame.grid_columnconfigure(1, weight=1)
 
     def save_notifications(self):
         notification_email = self.notification_email_entry.get()
@@ -473,20 +582,38 @@ class App:
 
     def show_cameras(self):
         self.clear_frame()
-        self.loading_label = ctk.CTkLabel(self.main_frame, text="Cargando cámaras...", font=("Cascadia Code Pl", 15))
-        self.loading_label.pack()
+
+        self.root.geometry("900x700")
+        self.root.minsize(900, 700)
+
+        # Etiqueta de carga
+        self.loading_label = ctk.CTkLabel(
+            self.main_frame,
+            text="Cargando cámaras...",
+            font=("Cascadia Code Pl", 18),
+            text_color="#FF5555"
+        )
+        self.loading_label.pack(pady=20)
         self.root.update_idletasks()
 
+        # Verificar y abrir cámaras
         for camera in self.cameras:
             if not camera.open():
                 messagebox.showerror("Error", f"No se pudo abrir la cámara con source {camera.source}")
                 return
 
         self.loading_label.destroy()
-        ctk.CTkLabel(self.main_frame, text="Visualización de Cámaras", font=("Cascadia Code Pl", 20, "bold")).pack()
 
-        cameras_frame = ctk.CTkFrame(self.main_frame)
-        cameras_frame.pack(fill=ctk.BOTH, expand=True)
+        # Etiqueta de Visualización de Cámaras
+        ctk.CTkLabel(
+            self.main_frame,
+            text="Visualización de Cámaras",
+            font=("Cascadia Code Pl", 28, "bold"),
+            text_color="#FF5555"
+        ).pack(pady=20)
+
+        cameras_frame = ctk.CTkFrame(self.main_frame, corner_radius=15, fg_color="#2D2D2D")
+        cameras_frame.pack(fill=ctk.BOTH, expand=True, padx=20, pady=20)
 
         num_columns = 2
         num_cameras = len(self.cameras)
@@ -500,21 +627,63 @@ class App:
             row = i // num_columns
             col = i % num_columns
 
-            frame = ctk.CTkFrame(row_frames[row])
-            frame.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True, padx=5, pady=5)
+            frame = ctk.CTkFrame(row_frames[row], corner_radius=15, fg_color="#1E1E1E")
+            frame.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True, padx=10, pady=10)
 
-            label = ctk.CTkLabel(frame, text=f"Cámara {i + 1}, {camera.zone}", font=("Cascadia Code Pl", 15))
-            label.pack()
+            label = ctk.CTkLabel(
+                frame,
+                text=f"Cámara {i + 1}, {camera.zone}",
+                font=("Cascadia Code Pl", 20),
+                text_color="#FFFFFF"
+            )
+            label.pack(pady=10)
 
             canvas = ctk.CTkCanvas(frame, width=320, height=240)
             canvas.pack(fill=ctk.BOTH, expand=True)
 
             self.update_camera_check(camera, canvas)
-            ctk.CTkButton(frame, text="WhatsApp Zona", command=lambda zone=camera.zone: self.alert_zone(zone)).pack()
 
-        ctk.CTkButton(self.main_frame, text="Sonar Alerta", command=self.sound_alert).pack()
+            ctk.CTkButton(
+                frame,
+                text="WhatsApp Zona",
+                command=lambda zone=camera.zone: self.alert_zone(zone),
+                width=200,
+                height=40,
+                corner_radius=15,
+                font=("Cascadia Code Pl", 18),
+                fg_color="#3B82F6",
+                hover_color="#2563EB",
+                text_color="#FFFFFF"
+            ).pack(pady=10)
 
-        ctk.CTkButton(self.main_frame, text="Volver", command=self.close_cameras).pack()
+        ctk.CTkButton(
+            self.main_frame,
+            text="Sonar Alerta",
+            command=self.sound_alert,
+            width=200,
+            height=50,
+            corner_radius=15,
+            font=("Cascadia Code Pl", 18),
+            fg_color="#FF5555",
+            hover_color="#FF0000",
+            text_color="#FFFFFF"
+        ).pack(pady=20)
+
+        ctk.CTkButton(
+            self.main_frame,
+            text="Volver",
+            command=self.close_cameras,
+            width=200,
+            height=50,
+            corner_radius=15,
+            font=("Cascadia Code Pl", 18),
+            fg_color="#3B82F6",
+            hover_color="#2563EB",
+            text_color="#FFFFFF"
+        ).pack(pady=20)
+
+        self.main_frame.configure(fg_color="#1E1E1E")
+        self.root.configure(bg="#1E1E1E")
 
     def update_camera_check(self, camera, canvas):
         def update():
@@ -540,22 +709,37 @@ class App:
         if not self.secret:
             messagebox.showerror("Error", "Debe vincular el autenticador antes de usar el sistema de alarma.")
             return
+
         self.clear_frame()
-        self.loading_label = ctk.CTkLabel(self.main_frame, text="Cargando cámaras...", font=("Cascadia Code Pl", 15))
-        self.loading_label.pack()
+
+        # Etiqueta de carga
+        self.loading_label = ctk.CTkLabel(
+            self.main_frame,
+            text="Cargando cámaras...",
+            font=("Cascadia Code Pl", 18),
+            text_color="#FF5555"
+        )
+        self.loading_label.pack(pady=20)
         self.root.update_idletasks()
 
+        # Verificar y abrir cámaras
         for camera in self.cameras:
             if not camera.open():
                 messagebox.showerror("Error", f"No se pudo abrir la cámara con source {camera.source}")
                 return
 
         self.loading_label.destroy()
-        ctk.CTkLabel(self.main_frame, text="Sistema de Alarma - Detección de Personas",
-                     font=("Cascadia Code Pl", 20, "bold")).pack()
 
-        cameras_frame = ctk.CTkFrame(self.main_frame)
-        cameras_frame.pack(fill=ctk.BOTH, expand=True)
+        # Etiqueta de Sistema de Alarma
+        ctk.CTkLabel(
+            self.main_frame,
+            text="Sistema de Alarma - Detección de Personas",
+            font=("Cascadia Code Pl", 28, "bold"),
+            text_color="#FF5555"
+        ).pack(pady=20)
+
+        cameras_frame = ctk.CTkFrame(self.main_frame, corner_radius=15, fg_color="#2D2D2D")
+        cameras_frame.pack(fill=ctk.BOTH, expand=True, padx=20, pady=20)
 
         num_columns = 2
         num_cameras = len(self.cameras)
@@ -571,11 +755,16 @@ class App:
             row = i // num_columns
             col = i % num_columns
 
-            frame = ctk.CTkFrame(row_frames[row])
-            frame.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True, padx=5, pady=5)
+            frame = ctk.CTkFrame(row_frames[row], corner_radius=15, fg_color="#1E1E1E")
+            frame.pack(side=ctk.LEFT, fill=ctk.BOTH, expand=True, padx=10, pady=10)
 
-            label = ctk.CTkLabel(frame, text=f"Cámara {i + 1}, Zone {camera.zone}", font=("Cascadia Code Pl", 15))
-            label.pack()
+            label = ctk.CTkLabel(
+                frame,
+                text=f"Cámara {i + 1}, Zone {camera.zone}",
+                font=("Cascadia Code Pl", 20),
+                text_color="#FFFFFF"
+            )
+            label.pack(pady=10)
 
             canvas = ctk.CTkCanvas(frame, width=320, height=240)
             canvas.pack(fill=ctk.BOTH, expand=True)
@@ -587,14 +776,27 @@ class App:
 
             self.root.after(100, self.update_canvas, canvas, q)
 
+        ctk.CTkButton(
+            self.main_frame,
+            text="Volver",
+            command=self.authenticate_and_close,
+            width=200,
+            height=50,
+            corner_radius=15,
+            font=("Cascadia Code Pl", 18),
+            fg_color="#3B82F6",
+            hover_color="#2563EB",
+            text_color="#FFFFFF"
+        ).pack(pady=20)
 
-        ctk.CTkButton(self.main_frame, text="Volver", command=self.authenticate_and_close).pack()
         # Guardar el protocolo original para restaurarlo después si es necesario
         self.original_close_protocol = self.root.protocol("WM_DELETE_WINDOW")
 
         # Configurar el nuevo protocolo
         self.root.protocol("WM_DELETE_WINDOW", self.authenticate_and_close)
 
+        self.main_frame.configure(fg_color="#1E1E1E")
+        self.root.configure(bg="#1E1E1E")
 
     def update_camera_view(self, camera, q, detect_person=False):
         while self.running:
@@ -643,15 +845,33 @@ class App:
             camera.close()
         self.clear_frame()
         self.load_interface_by_role()
+
     def load_interface_by_role(self):
+        self.clear_frame()
+
+        # Configurar estilos
+        welcome_label_config = {
+            "font": ("Cascadia Code Pl", 24, "bold"),
+            "text_color": "#FFFFFF",
+            "padx": 20,
+            "pady": 10
+        }
+
         if self.current_role == 1:
             self.admin_menu()
         elif self.current_role == 2:
             self.monitor_menu()
         else:
-            self.admin_menu()
-            ctk.CTkLabel(self.main_frame, text=f"Bienvenido, {self.current_role}").pack()
-       
+            ctk.CTkLabel(
+                self.main_frame,
+                text=f"Bienvenido, {self.current_role}",
+                **welcome_label_config
+            ).pack(pady=20)
+
+        # Fondo del main_frame
+        self.main_frame.configure(fg_color="#1E1E1E")
+        self.root.configure(bg="#1E1E1E")
+
     def sound_alert(self):
         threading.Thread(target=self.play_sound).start()
 
@@ -689,6 +909,7 @@ class App:
             self.root.protocol("WM_DELETE_WINDOW", self.original_close_protocol)
             self.close_cameras()
         else:
+            send_whatsapp_alert_failed_autentication()
             messagebox.showerror("Error", "Código incorrecto. No se puede apagar el sistema.")
     def link_autenticator(self):
         self.secret = generate_secret()
@@ -698,32 +919,39 @@ class App:
 
     def show_qr_code(self):
         self.clear_frame()
-        ctk.CTkLabel(self.main_frame, text="Escanea el código QR para vincular tu autenticador de Google",
-                     font=("Cascadia Code Pl", 20, "bold")).pack()
 
+        self.root.geometry("900x400")
+        self.root.minsize(900, 400)
+
+        # Etiqueta de Instrucción
+        ctk.CTkLabel(
+            self.main_frame,
+            text="Escanea el código QR para vincular tu autenticador de Google",
+            font=("Cascadia Code Pl", 24, "bold"),
+            text_color="#FF5555"
+        ).pack(pady=20)
+
+        # Imagen del Código QR
         qr_code = ctk.CTkImage(Image.open("qrcode.png"), size=(200, 200))
-        ctk.CTkLabel(self.main_frame, image=qr_code).pack()
+        ctk.CTkLabel(self.main_frame, image=qr_code).pack(pady=20)
 
-        ctk.CTkButton(self.main_frame, text="Volver", command=self.load_interface_by_role).pack()
+        # Botón Volver
+        ctk.CTkButton(
+            self.main_frame,
+            text="Volver",
+            command=self.load_interface_by_role,
+            width=200,
+            height=50,
+            corner_radius=15,
+            font=("Cascadia Code Pl", 18),
+            fg_color="#3B82F6",
+            hover_color="#2563EB",
+            text_color="#FFFFFF"
+        ).pack(pady=20)
 
-
-
-
-    # def save_image(self, image):
-    #     local_path = self.detector.save_image(image)
-    #
-    #     # Sube el archivo a Google Drive en un hilo separado
-    #     thread = threading.Thread(target=upload_to_drive, args=(self.service, local_path, self.folder_id))
-    #     thread.start()
-    #
-    #     folder_url = f"https://drive.google.com/drive/folders/{self.folder_id}"
-    #     #print(f'File uploaded. Folder URL: {folder_url}')
-    #     send_email(folder_url)
-
-
-
-
-
+        # Fondo del main_frame
+        self.main_frame.configure(fg_color="#1E1E1E")
+        self.root.configure(bg="#1E1E1E")
 
 
 

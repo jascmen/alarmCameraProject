@@ -66,7 +66,7 @@ def send_whatsapp_zone(zone):
 
     message = client.messages.create(
         from_='whatsapp:+14155238886',
-        body='Alerta en la zona ' + zone + ', avisar al personal de seguridad',
+        body='Alerta en la ' + zone + ', avisar al personal de seguridad',
         to='whatsapp:+51941768950'
     )
     #print(message.sid)
@@ -83,6 +83,20 @@ def send_whatsapp_admin():
     message = client.messages.create(
         from_='whatsapp:+14155238886',
         body='Persona detectada en el loca, revise el enlace para ver los archivos:'+link_drive +' \nDe ser necesario avise a las autoridades.',
+        to='whatsapp:+51941768950'
+    )
+
+def send_whatsapp_alert_failed_autentication():
+
+    load_dotenv()
+
+    account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+    auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+    client = Client(account_sid, auth_token)
+
+    message = client.messages.create(
+        from_='whatsapp:+14155238886',
+        body='Autenticacion fallida en el sistema de deteccion, revise el sistema de seguridad',
         to='whatsapp:+51941768950'
     )
     #print(message.sid)
