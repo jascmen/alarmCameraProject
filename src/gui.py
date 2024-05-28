@@ -587,7 +587,14 @@ class App:
 
             self.root.after(100, self.update_canvas, canvas, q)
 
+
         ctk.CTkButton(self.main_frame, text="Volver", command=self.authenticate_and_close).pack()
+        # Guardar el protocolo original para restaurarlo después si es necesario
+        self.original_close_protocol = self.root.protocol("WM_DELETE_WINDOW")
+
+        # Configurar el nuevo protocolo
+        self.root.protocol("WM_DELETE_WINDOW", self.authenticate_and_close)
+
 
     def update_camera_view(self, camera, q, detect_person=False):
         while self.running:
@@ -678,6 +685,8 @@ class App:
     def authenticate_and_close(self):
         code = simpledialog.askstring("Autenticación", "Ingrese el código del autenticador:")
         if code and verify_code(self.secret, code):
+            # Restaurar el protocolo original antes de cerrar
+            self.root.protocol("WM_DELETE_WINDOW", self.original_close_protocol)
             self.close_cameras()
         else:
             messagebox.showerror("Error", "Código incorrecto. No se puede apagar el sistema.")
